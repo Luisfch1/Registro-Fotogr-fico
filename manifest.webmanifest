@@ -1,7 +1,8 @@
 {
   "name": "Registro Fotográfico",
   "short_name": "RF",
-  "start_url": ".",
+  "start_url": "/Registro-Fotogr-fico/",
+  "scope": "/Registro-Fotogr-fico/",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
