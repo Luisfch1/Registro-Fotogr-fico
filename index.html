@@ -205,7 +205,7 @@
         <button class="btn btn-secondary" id="btnLimpiarDia">🧹 Limpiar SOLO fecha actual</button>
       </div>
 
-      <!-- LOGO (captura) -->
+      <!-- LOGO (captura + WhatsApp) -->
       <div class="row" style="margin-top:10px;">
         <input id="logoInput" type="file" accept="image/*" style="display:none" />
         <button class="btn btn-secondary" id="btnCargarLogo">🖼️ Cargar logo</button>
@@ -213,6 +213,12 @@
         <label style="display:flex;align-items:center;gap:10px;margin:0">
           <input type="checkbox" id="logoEnabled" />
           <span class="muted">Aplicar logo a nuevas fotos (captura)</span>
+        </label>
+
+        <!-- NUEVO: WhatsApp controla si se incluye logo al enviar -->
+        <label style="display:flex;align-items:center;gap:10px;margin:0">
+          <input type="checkbox" id="waIncludeLogo" />
+          <span class="muted">WhatsApp: incluir logo al enviar</span>
         </label>
 
         <select id="logoCorner" style="width:auto">
@@ -474,6 +480,17 @@ function formatStampDateTime(it){
 }
 
 /* ===========================
+   WhatsApp: preferencia
+=========================== */
+function loadWhatsAppLogoPref(){
+  const v = localStorage.getItem("rf_wa_logo") === "1";
+  $("waIncludeLogo").checked = v;
+}
+$("waIncludeLogo").onchange = () => {
+  localStorage.setItem("rf_wa_logo", $("waIncludeLogo").checked ? "1" : "0");
+};
+
+/* ===========================
    URLs temporales
 =========================== */
 let activeUrls = [];
@@ -576,7 +593,7 @@ function oppositeCorner(c){
 }
 
 /* ===========================
-   Compresión (captura) + pegar logo si toggle activo
+   Overlays: logo + sello
 =========================== */
 function drawLogoAtCorner(ctx, W, H, corner, alpha=0.85){
   if (!logoBitmap) return false;
@@ -648,8 +665,13 @@ function drawStampAtCorner(ctx, W, H, text, corner){
   ctx.restore();
 }
 
+/* ===========================
+   Compresión (captura)
+   - SIEMPRE guarda base sin logo
+   - Si "captura logo" está activo, crea además una variante con logo (logoBlob)
+=========================== */
 async function compressImage(file, maxSide=1600, quality=0.82){
-  if (!file.type.startsWith("image/")) return { blob: file, hasLogo: false };
+  if (!file.type.startsWith("image/")) return { blob: file, logoBlob: null, hasLogo: false };
 
   const img = new Image();
   const url = URL.createObjectURL(file);
@@ -672,12 +694,21 @@ async function compressImage(file, maxSide=1600, quality=0.82){
 
   URL.revokeObjectURL(url);
 
-  const enabled = localStorage.getItem("rf_logo_enabled") === "1";
-  const corner = localStorage.getItem("rf_logo_corner") || "br";
-  const hadLogo = (enabled && logoBitmap) ? drawLogoAtCorner(ctx, nw, nh, corner, 0.85) : false;
+  // 1) Base sin logo
+  const baseBlob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
 
-  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
-  return { blob: blob || file, hasLogo: !!hadLogo };
+  // 2) Variante con logo (solo si captura está activa)
+  const enabledCapture = localStorage.getItem("rf_logo_enabled") === "1";
+  const corner = localStorage.getItem("rf_logo_corner") || "br";
+
+  let logoBlob = null;
+  if (enabledCapture && logoBitmap){
+    // dibujar logo encima y sacar segunda versión
+    drawLogoAtCorner(ctx, nw, nh, corner, 0.85);
+    logoBlob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+  }
+
+  return { blob: baseBlob || file, logoBlob: logoBlob || null, hasLogo: false };
 }
 
 /* ===========================
@@ -978,18 +1009,44 @@ $("btnModalShare").onclick = async () => {
 
 /* ===========================
    Compartir a WhatsApp (solo imagen)
+   - SIEMPRE depende de la casilla "waIncludeLogo"
+   - NO toca exportación
 =========================== */
 async function shareOnlyImage(it){
   const safeProject = sanitizeName(it.proyecto || "Foto");
   const name = `${it.fecha}_${safeProject}.jpg`;
-  const file = new File([it.blob], name, { type: "image/jpeg" });
+
+  const wantLogo = !!$("waIncludeLogo")?.checked;
+
+  // base siempre es it.blob (nueva captura: sin logo; legacy: puede traerlo horneado)
+  let outBlob = it.blob;
+
+  if (wantLogo){
+    // 1) si existe variante con logo (creada al capturar), úsala
+    if (it.logoBlob){
+      outBlob = it.logoBlob;
+    }
+    // 2) si no hay variante, pero sí hay logo cargado, generar al vuelo
+    else if (logoBitmap){
+      outBlob = await applyExportOverlaysToBlob(it.blob, {
+        addLogo: true,
+        addStamp: false,
+        stampText: "",
+        // si la foto legacy ya venía con logo horneado, evita “doble logo”
+        avoidDoubleLogo: !!it.hasLogo
+      });
+    }
+  }
+  // si wantLogo es false, se comparte base (si es legacy con logo horneado, no se puede quitar)
+
+  const file = new File([outBlob], name, { type: "image/jpeg" });
 
   if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))){
     try { await navigator.share({ files: [file], title: "Foto" }); return; }
     catch { return; }
   }
 
-  const url = URL.createObjectURL(it.blob);
+  const url = URL.createObjectURL(outBlob);
   const a = document.createElement("a");
   a.href = url;
   a.download = name;
@@ -1015,7 +1072,7 @@ camInput.onchange = async () => {
 
   zipInfo.textContent = "Procesando fotos...";
   for (const file of files){
-    const { blob, hasLogo } = await compressImage(file);
+    const { blob, logoBlob, hasLogo } = await compressImage(file);
 
     const item = {
       id: Date.now() + Math.floor(Math.random()*1000),
@@ -1023,9 +1080,16 @@ camInput.onchange = async () => {
       proyecto,
       descripcion: "",
       done: false,
+
+      // base SIEMPRE
       blob,
+      // variante con logo (si aplica en captura)
+      logoBlob: logoBlob || null,
+
       mime: "image/jpeg",
       createdAt: Date.now(),
+
+      // legacy: indica si el blob YA incluye logo horneado
       hasLogo: !!hasLogo
     };
 
@@ -1469,6 +1533,7 @@ function render(){
   loadDocxFit();
   await loadLogoFromStorage();
   loadLogoCorner();
+  loadWhatsAppLogoPref();
 
   try{
     cache = await dbGetAll();
@@ -1482,4 +1547,6 @@ function render(){
 </script>
 </body>
 </html>
+
+
 
