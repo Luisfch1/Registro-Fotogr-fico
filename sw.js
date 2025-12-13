@@ -1,4 +1,6 @@
-const CACHE = "rf-cache-v2"; // <-- súbele el número cuando quieras forzar update
+// sw.js (PWA) — actualizado para evitar quedarse pegado en versiones viejas
+
+const CACHE = "rf-cache-v3"; // <-- súbele el número cuando quieras forzar update
 const ASSETS = [
   "./",
   "./index.html",
@@ -9,6 +11,7 @@ const ASSETS = [
   "./icon-512.png"
 ];
 
+// 1) Instalación: precache de assets + listo para tomar control rápido
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE)
@@ -17,27 +20,38 @@ self.addEventListener("install", (event) => {
   );
 });
 
+// 2) Activación: borrar caches viejos + tomar control
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
-    // 🔥 borra caches viejos
     const keys = await caches.keys();
     await Promise.all(keys.map((k) => (k !== CACHE ? caches.delete(k) : Promise.resolve())));
     await self.clients.claim();
   })());
 });
 
+// 3) Mensajes desde la app (para el botón "Actualizar app")
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
+// 4) Fetch strategy:
+//    - HTML: NETWORK FIRST (si hay internet, trae lo nuevo; si no, usa cache)
+//    - assets: CACHE FIRST (rápido)
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   const url = new URL(req.url);
 
-  if (url.origin !== location.origin) return;
+  // Solo cacheamos lo propio
+  if (url.origin !== self.location.origin) return;
 
-  // ✅ 1) index.html: NETWORK FIRST (para que se actualice)
   const isHTML =
     req.mode === "navigate" ||
     url.pathname.endsWith("/index.html") ||
     (req.headers.get("accept") || "").includes("text/html");
 
+  // ✅ HTML: network-first
   if (isHTML) {
     event.respondWith((async () => {
       try {
@@ -45,7 +59,7 @@ self.addEventListener("fetch", (event) => {
         const cache = await caches.open(CACHE);
         cache.put(req, fresh.clone());
         return fresh;
-      } catch (e) {
+      } catch {
         const cached = await caches.match(req) || await caches.match("./index.html");
         return cached || Response.error();
       }
@@ -53,7 +67,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // ✅ 2) Assets estáticos: CACHE FIRST (rápido)
+  // ✅ Assets: cache-first (con fallback a red y guardado)
   event.respondWith((async () => {
     const cached = await caches.match(req);
     if (cached) return cached;
