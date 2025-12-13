@@ -163,6 +163,30 @@
     }
     .modalTitle{font-weight:900}
     .modalCloseRow{display:flex;justify-content:space-between;align-items:center;gap:10px}
+
+    /* ===========================
+       Update UI (botón iluminado + banner)
+    =========================== */
+    .updateBanner{
+      display:none;
+      padding:8px 10px;
+      border-radius:12px;
+      border:1px solid rgba(34,211,238,.35);
+      background:rgba(34,211,238,.08);
+      color:#cbd5e1;
+      font-size:.82rem;
+    }
+    .updateBanner.show{display:inline-flex;align-items:center;gap:8px}
+    .btn-glow{
+      border-color:rgba(34,211,238,.75) !important;
+      box-shadow:0 0 0 2px rgba(34,211,238,.12), 0 0 18px rgba(34,211,238,.22);
+      animation:pulseGlow 1.2s ease-in-out infinite;
+    }
+    @keyframes pulseGlow{
+      0%{ box-shadow:0 0 0 2px rgba(34,211,238,.10), 0 0 12px rgba(34,211,238,.18); }
+      50%{ box-shadow:0 0 0 2px rgba(34,211,238,.18), 0 0 22px rgba(34,211,238,.28); }
+      100%{ box-shadow:0 0 0 2px rgba(34,211,238,.10), 0 0 12px rgba(34,211,238,.18); }
+    }
   </style>
 </head>
 
@@ -176,7 +200,14 @@
           <span class="pill">control</span>
           <div class="muted">Guardado local (IndexedDB) + export ZIP (incluye DOCX).</div>
         </div>
-        <div id="status" class="status"></div>
+
+        <div class="row" style="gap:8px;align-items:center;justify-content:flex-end">
+          <div id="updateBanner" class="updateBanner">
+            ⚡ Hay una actualización disponible.
+          </div>
+          <button class="btn btn-secondary smallBtn" id="btnUpdateApp" title="Forzar actualización">🔄 Actualizar app</button>
+          <div id="status" class="status"></div>
+        </div>
       </div>
 
       <div class="row" style="margin-top:10px;justify-content:space-between;">
@@ -209,6 +240,7 @@
       <div class="row" style="margin-top:10px;">
         <input id="logoInput" type="file" accept="image/*" style="display:none" />
         <button class="btn btn-secondary" id="btnCargarLogo">🖼️ Cargar logo</button>
+        <button class="btn btn-secondary" id="btnQuitarLogo">🧽 Quitar logo</button>
 
         <label style="display:flex;align-items:center;gap:10px;margin:0">
           <input type="checkbox" id="logoEnabled" />
@@ -352,11 +384,106 @@
 
 <script>
 /* ===========================
-   Service Worker (PWA)
+   Service Worker (PWA) + Botón “Actualizar app”
 =========================== */
+let swReg = null;
+let updateAvailable = false;
+
+function setUpdateBanner(show){
+  const b = document.getElementById("updateBanner");
+  if (!b) return;
+  b.classList.toggle("show", !!show);
+}
+
+function setUpdateBtnState(state){
+  const btn = document.getElementById("btnUpdateApp");
+  if (!btn) return;
+
+  if (state === "working"){
+    btn.disabled = true;
+    btn.classList.add("btn-disabled");
+    btn.textContent = "⏳ Actualizando...";
+    return;
+  }
+  btn.disabled = false;
+  btn.classList.remove("btn-disabled");
+  btn.textContent = "🔄 Actualizar app";
+}
+
+function setUpdateGlow(on){
+  const btn = document.getElementById("btnUpdateApp");
+  if (!btn) return;
+  btn.classList.toggle("btn-glow", !!on);
+}
+
+async function forceUpdateApp(){
+  try{
+    setUpdateBtnState("working");
+
+    if (swReg){
+      // pedir actualización al SW
+      await swReg.update();
+
+      // si hay uno esperando, lo activamos YA
+      if (swReg.waiting){
+        swReg.waiting.postMessage({ type: "SKIP_WAITING" });
+        return; // controllerchange hará reload
+      }
+    }
+    // si no hay waiting, recarga normal
+    window.location.reload();
+  } finally {
+    setTimeout(()=> setUpdateBtnState("ready"), 700);
+  }
+}
+
+function watchForUpdates(reg){
+  if (!reg) return;
+
+  // si ya hay update esperando al abrir
+  if (reg.waiting && navigator.serviceWorker.controller){
+    updateAvailable = true;
+    setUpdateBanner(true);
+    setUpdateGlow(true);
+  }
+
+  reg.addEventListener("updatefound", () => {
+    const nw = reg.installing;
+    if (!nw) return;
+
+    nw.addEventListener("statechange", () => {
+      // installed + ya existe controller => update disponible
+      if (nw.state === "installed" && navigator.serviceWorker.controller){
+        updateAvailable = true;
+        setUpdateBanner(true);
+        setUpdateGlow(true);
+      }
+    });
+  });
+}
+
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").catch(()=>{});
+  window.addEventListener("load", async () => {
+    try{
+      swReg = await navigator.serviceWorker.register("./sw.js");
+
+      watchForUpdates(swReg);
+
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        // nuevo SW tomó control → recargar para ver cambios
+        window.location.reload();
+      });
+
+      const btn = document.getElementById("btnUpdateApp");
+      if (btn) btn.onclick = forceUpdateApp;
+
+      setUpdateBtnState("ready");
+    } catch {
+      // fallback: botón recarga
+      const btn = document.getElementById("btnUpdateApp");
+      if (btn) btn.onclick = () => window.location.reload();
+      setUpdateBtnState("ready");
+    }
   });
 }
 
@@ -534,6 +661,7 @@ async function loadLogoFromStorage(){
     $("logoPreview").style.display = "none";
     logoBitmap = null;
   }
+  updateShareUI();
 }
 
 function loadLogoCorner(){
@@ -569,17 +697,38 @@ $("logoInput").onchange = async () => {
     alert("Logo cargado ✅");
   } catch {
     logoBitmap = null;
-    alert("No pude cargar el logo. Prueba con un PNG.");
+    alert("No pude cargar el logo. Prueba con un PNG/JPG.");
   }
   updateShareUI();
 };
 
-$("logoEnabled").onchange = () => {
-  localStorage.setItem("rf_logo_enabled", $("logoEnabled").checked ? "1" : "0");
+$("btnQuitarLogo").onclick = async () => {
+  if (!logoDataUrl && !logoBitmap){
+    alert("No hay logo cargado.");
+    return;
+  }
+  if (!confirm("¿Quitar/eliminar el logo cargado? (No borra tus fotos guardadas)")) return;
+
+  localStorage.removeItem("rf_logo_dataurl");
+  logoDataUrl = null;
+  logoBitmap = null;
+
+  $("logoPreview").src = "";
+  $("logoPreview").style.display = "none";
+
+  // Si estaba activo WhatsApp+logo, lo dejamos activo pero avisará al enviar.
+  // Si prefieres apagarlo automático, descomenta estas 2 líneas:
+  // $("waIncludeLogo").checked = false;
+  // localStorage.setItem("rf_wa_logo", "0");
+
+  updateShareUI();
+  alert("Logo eliminado ✅");
 };
 
+$("logoEnabled").onchange = () => localStorage.setItem("rf_logo_enabled", $("logoEnabled").checked ? "1" : "0");
+
 /* ===========================
-   WhatsApp: preferencia + UI (toque pro)
+   WhatsApp: preferencia + UI
 =========================== */
 function getWaIncludeLogo(){
   return localStorage.getItem("rf_wa_logo") === "1";
@@ -702,8 +851,8 @@ function drawStampAtCorner(ctx, W, H, text, corner){
 
 /* ===========================
    Compresión (captura)
-   - Guarda SIEMPRE base sin logo en it.blob
-   - Si logoEnabled está ON, guarda además it.logoBlob con logo (solo “variante”)
+   - it.blob = base sin logo
+   - it.logoBlob = variante con logo (si captura ON)
 =========================== */
 async function compressImage(file, maxSide=1600, quality=0.82){
   if (!file.type.startsWith("image/")) return { blob: file, logoBlob: null, hasLogo: false };
@@ -875,6 +1024,7 @@ function renderCaptura(){
   });
 
   wireEventsCaptura();
+  updateShareUI();
 }
 
 function wireEventsCaptura(){
@@ -968,6 +1118,8 @@ function renderGaleria(){
   wrap.querySelectorAll("img.gThumb").forEach(img => {
     img.onclick = () => openModal(Number(img.dataset.open));
   });
+
+  updateShareUI();
 }
 
 /* ===========================
@@ -1052,7 +1204,6 @@ async function shareOnlyImage(it){
   const name = `${it.fecha}_${safeProject}.jpg`;
 
   const wantLogo = getWaIncludeLogo();
-
   let outBlob = it.blob;
 
   if (wantLogo){
@@ -1111,11 +1262,11 @@ camInput.onchange = async () => {
       proyecto,
       descripcion: "",
       done: false,
-      blob,                 // base (normalmente sin logo)
-      logoBlob: logoBlob||null, // variante con logo si captura estaba ON
+      blob,
+      logoBlob: logoBlob||null,
       mime: "image/jpeg",
       createdAt: Date.now(),
-      hasLogo: !!hasLogo    // legacy-friendly
+      hasLogo: !!hasLogo
     };
 
     await dbPut(item);
@@ -1140,7 +1291,6 @@ $("btnLimpiarDia").onclick = async () => {
 
 /* ===========================
    DOCX helpers + DOCX builder
-   (Se mantiene tal cual tu versión)
 =========================== */
 function cmToPx(cm){ return Math.round((cm / 2.54) * 96); }
 
@@ -1207,14 +1357,13 @@ async function buildRegistroFotograficoDocxBuffer(
     styles: {
       default: {
         document: {
-          run: { font: "Calibri", size: 18 }, // Calibri 9
+          run: { font: "Calibri", size: 18 },
           paragraph: { spacing: { before: 0, after: 0 } }
         }
       }
     }
   };
 
-  // 1/4 punto -> size 2 (octavos de punto)
   const gridBorders = {
     top:    { style: BorderStyle.SINGLE, size: 2, color: "334155" },
     bottom: { style: BorderStyle.SINGLE, size: 2, color: "334155" },
@@ -1544,7 +1693,6 @@ function render(){
   setStatus();
   if (viewMode === "captura") renderCaptura();
   else renderGaleria();
-  updateShareUI();
 }
 
 /* ===========================
@@ -1574,7 +1722,6 @@ function render(){
 </body>
 </html>
 
-<!-- deploy bump -->
 
 
 
