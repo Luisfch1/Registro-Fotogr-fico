@@ -245,7 +245,6 @@
       </div>
 
       <div class="row" style="margin-top:10px;">
-        <!-- ✅ FIX: oculto fuera de pantalla, no display:none -->
         <input id="camInput" class="hiddenFileInput" type="file" accept="image/*" capture="environment" multiple />
         <button class="btn btn-primary" id="btnTomarFoto">📷 Tomar/Seleccionar fotos</button>
         <button class="btn btn-secondary" id="btnLimpiarDia">🧹 Limpiar SOLO fecha actual</button>
@@ -253,7 +252,6 @@
 
       <!-- LOGO (captura) -->
       <div class="row" style="margin-top:10px;">
-        <!-- ✅ FIX: también oculto fuera de pantalla -->
         <input id="logoInput" class="hiddenFileInput" type="file" accept="image/*" />
         <button class="btn btn-secondary" id="btnCargarLogo">🖼️ Cargar logo</button>
         <button class="btn btn-secondary" id="btnQuitarLogo" style="display:none">🗑️ Quitar logo</button>
@@ -392,6 +390,9 @@
   </div>
 
 <script>
+/* ✅ FIX CRÍTICO: $ debe existir ANTES de usarse */
+function $(id){ return document.getElementById(id); }
+
 /* ===========================
    Service Worker (PWA) + Update UI
 =========================== */
@@ -408,7 +409,6 @@ async function triggerSWUpdate(){
     if (waitingSW){
       waitingSW.postMessage({ type: "SKIP_WAITING" });
     } else {
-      // Si no hay waiting worker, igual intenta update (por si acaso)
       const reg = await navigator.serviceWorker.getRegistration();
       if (reg) await reg.update();
     }
@@ -420,7 +420,6 @@ if ("serviceWorker" in navigator) {
     try{
       const reg = await navigator.serviceWorker.register("./sw.js");
 
-      // Si ya había un waiting desde antes
       if (reg.waiting){
         waitingSW = reg.waiting;
         showUpdateUI();
@@ -439,16 +438,14 @@ if ("serviceWorker" in navigator) {
       });
 
       navigator.serviceWorker.addEventListener("controllerchange", () => {
-        // Ya tomó la nueva versión -> recarga
         window.location.reload();
       });
 
-    }catch(e){
-      // si falla, no bloqueamos la app
-    }
+    }catch(e){}
   });
 }
 
+/* ✅ Ahora sí, ya existe $ */
 $("btnUpdateApp").onclick = triggerSWUpdate;
 $("btnUpdateNow").onclick = triggerSWUpdate;
 
@@ -511,8 +508,6 @@ async function dbClear(){
 /* ===========================
    Utilidades
 =========================== */
-const $ = (id) => document.getElementById(id);
-
 const fechaInput = $("fecha");
 const proyectoInput = $("proyecto");
 const camInput = $("camInput");
@@ -1124,9 +1119,7 @@ async function shareOnlyImage(it){
    Captura (✅ FIX: click confiable en PWA)
 =========================== */
 $("btnTomarFoto").onclick = () => {
-  // Reset para que si eliges la misma foto, dispare onchange
   camInput.value = "";
-  // En algunos Android ayuda que el click ocurra justo en el gesto
   camInput.click();
 };
 
@@ -1191,7 +1184,6 @@ function computeRangeForTitle(modo, desde, hasta){
   return { start: desde, end: hasta };
 }
 
-// fit: stretch | contain | cover
 async function normalizeToFixedFrameJpg(blob, frameW=1600, frameH=1000, quality=0.9, fit="stretch"){
   const bmp = await createImageBitmap(blob);
   const canvas = document.createElement("canvas");
@@ -1213,7 +1205,7 @@ async function normalizeToFixedFrameJpg(blob, frameW=1600, frameH=1000, quality=
     const x = Math.round((frameW - nw) / 2);
     const y = Math.round((frameH - nh) / 2);
     ctx.drawImage(bmp, x, y, nw, nh);
-  } else { // contain
+  } else {
     const scale = Math.min(frameW / bw, frameH / bh);
     const nw = Math.round(bw * scale);
     const nh = Math.round(bh * scale);
@@ -1241,14 +1233,13 @@ async function buildRegistroFotograficoDocxBuffer(
     styles: {
       default: {
         document: {
-          run: { font: "Calibri", size: 18 }, // Calibri 9
+          run: { font: "Calibri", size: 18 },
           paragraph: { spacing: { before: 0, after: 0 } }
         }
       }
     }
   };
 
-  // 1/4 punto -> size 2 (octavos de punto)
   const gridBorders = {
     top:    { style: BorderStyle.SINGLE, size: 2, color: "334155" },
     bottom: { style: BorderStyle.SINGLE, size: 2, color: "334155" },
@@ -1605,6 +1596,8 @@ function render(){
 </script>
 </body>
 </html>
+
+
 
 
 
