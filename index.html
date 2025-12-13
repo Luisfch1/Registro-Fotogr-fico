@@ -164,28 +164,29 @@
     .modalTitle{font-weight:900}
     .modalCloseRow{display:flex;justify-content:space-between;align-items:center;gap:10px}
 
-    /* ===========================
-       Update UI (botón iluminado + banner)
-    =========================== */
-    .updateBanner{
+    /* ===== Update bar (mensaje + botón iluminado) ===== */
+    .updateBar{
+      position:fixed; left:12px; right:12px; bottom:12px;
+      background:rgba(5,10,20,.92);
+      border:1px solid #334155;
+      border-radius:14px;
+      padding:10px 12px;
+      z-index:60;
       display:none;
-      padding:8px 10px;
-      border-radius:12px;
-      border:1px solid rgba(34,211,238,.35);
-      background:rgba(34,211,238,.08);
-      color:#cbd5e1;
-      font-size:.82rem;
+      box-shadow:0 18px 50px rgba(0,0,0,.55);
+      backdrop-filter: blur(8px);
     }
-    .updateBanner.show{display:inline-flex;align-items:center;gap:8px}
-    .btn-glow{
-      border-color:rgba(34,211,238,.75) !important;
-      box-shadow:0 0 0 2px rgba(34,211,238,.12), 0 0 18px rgba(34,211,238,.22);
-      animation:pulseGlow 1.2s ease-in-out infinite;
+    .updateBar.show{display:flex}
+    .updateText{flex:1;min-width:180px}
+    .pulse{
+      position:relative;
+      box-shadow:0 0 0 rgba(34,211,238,.6);
+      animation:pulseGlow 1.2s infinite;
     }
     @keyframes pulseGlow{
-      0%{ box-shadow:0 0 0 2px rgba(34,211,238,.10), 0 0 12px rgba(34,211,238,.18); }
-      50%{ box-shadow:0 0 0 2px rgba(34,211,238,.18), 0 0 22px rgba(34,211,238,.28); }
-      100%{ box-shadow:0 0 0 2px rgba(34,211,238,.10), 0 0 12px rgba(34,211,238,.18); }
+      0%{box-shadow:0 0 0 0 rgba(34,211,238,.55)}
+      70%{box-shadow:0 0 0 10px rgba(34,211,238,0)}
+      100%{box-shadow:0 0 0 0 rgba(34,211,238,0)}
     }
   </style>
 </head>
@@ -201,11 +202,8 @@
           <div class="muted">Guardado local (IndexedDB) + export ZIP (incluye DOCX).</div>
         </div>
 
-        <div class="row" style="gap:8px;align-items:center;justify-content:flex-end">
-          <div id="updateBanner" class="updateBanner">
-            ⚡ Hay una actualización disponible.
-          </div>
-          <button class="btn btn-secondary smallBtn" id="btnUpdateApp" title="Forzar actualización">🔄 Actualizar app</button>
+        <div class="row">
+          <button class="btn btn-secondary smallBtn" id="btnUpdateApp" style="display:none">🔄 Actualizar app</button>
           <div id="status" class="status"></div>
         </div>
       </div>
@@ -234,25 +232,23 @@
         <input id="camInput" type="file" accept="image/*" capture="environment" multiple style="display:none"/>
         <button class="btn btn-primary" id="btnTomarFoto">📷 Tomar/Seleccionar fotos</button>
         <button class="btn btn-secondary" id="btnLimpiarDia">🧹 Limpiar SOLO fecha actual</button>
+
+        <label style="display:flex;align-items:center;gap:10px;margin:0">
+          <input type="checkbox" id="saveToDownloads" />
+          <span class="muted">Guardar copia en Descargas</span>
+        </label>
       </div>
 
-      <!-- LOGO (captura + WhatsApp) -->
+      <!-- LOGO -->
       <div class="row" style="margin-top:10px;">
         <input id="logoInput" type="file" accept="image/*" style="display:none" />
         <button class="btn btn-secondary" id="btnCargarLogo">🖼️ Cargar logo</button>
-        <button class="btn btn-secondary" id="btnQuitarLogo">🧽 Quitar logo</button>
+        <button class="btn btn-danger" id="btnBorrarLogo" style="display:none">🧽 Quitar logo</button>
 
         <label style="display:flex;align-items:center;gap:10px;margin:0">
-          <input type="checkbox" id="logoEnabled" />
-          <span class="muted">Aplicar logo a nuevas fotos (captura)</span>
+          <input type="checkbox" id="shareLogo" />
+          <span class="muted">En WhatsApp: incluir logo</span>
         </label>
-
-        <label style="display:flex;align-items:center;gap:10px;margin:0">
-          <input type="checkbox" id="waIncludeLogo" />
-          <span class="muted">WhatsApp: incluir logo al enviar</span>
-        </label>
-
-        <span id="waHint" class="muted"></span>
 
         <select id="logoCorner" style="width:auto">
           <option value="br">Logo: inferior derecha</option>
@@ -349,6 +345,18 @@
     </div>
   </div>
 
+  <!-- Update bar -->
+  <div class="updateBar" id="updateBar">
+    <div class="updateText">
+      <div style="font-weight:900">Hay una actualización lista ✅</div>
+      <div class="muted">Dale a <b>Actualizar app</b> para ver los cambios en el celular.</div>
+    </div>
+    <div class="row" style="justify-content:flex-end;gap:10px">
+      <button class="btn btn-secondary smallBtn" id="btnUpdateLater">Ahora no</button>
+      <button class="btn btn-primary smallBtn pulse" id="btnUpdateNow">🔄 Actualizar app</button>
+    </div>
+  </div>
+
   <!-- Modal -->
   <div class="modal" id="modal">
     <div class="modalCard">
@@ -384,82 +392,31 @@
 
 <script>
 /* ===========================
-   Service Worker (PWA) + Botón “Actualizar app”
+   Service Worker (PWA) + Update UI
 =========================== */
 let swReg = null;
-let updateAvailable = false;
 
-function setUpdateBanner(show){
-  const b = document.getElementById("updateBanner");
-  if (!b) return;
-  b.classList.toggle("show", !!show);
+function showUpdateUI(){
+  $("updateBar").classList.add("show");
+  $("btnUpdateApp").style.display = "inline-flex";
+}
+function hideUpdateUI(){
+  $("updateBar").classList.remove("show");
+  $("btnUpdateApp").style.display = "none";
 }
 
-function setUpdateBtnState(state){
-  const btn = document.getElementById("btnUpdateApp");
-  if (!btn) return;
-
-  if (state === "working"){
-    btn.disabled = true;
-    btn.classList.add("btn-disabled");
-    btn.textContent = "⏳ Actualizando...";
+async function triggerSWUpdate(){
+  if (!swReg) return;
+  // Si ya hay waiting, lo activamos
+  if (swReg.waiting){
+    swReg.waiting.postMessage({ type: "SKIP_WAITING" });
     return;
   }
-  btn.disabled = false;
-  btn.classList.remove("btn-disabled");
-  btn.textContent = "🔄 Actualizar app";
-}
-
-function setUpdateGlow(on){
-  const btn = document.getElementById("btnUpdateApp");
-  if (!btn) return;
-  btn.classList.toggle("btn-glow", !!on);
-}
-
-async function forceUpdateApp(){
-  try{
-    setUpdateBtnState("working");
-
-    if (swReg){
-      // pedir actualización al SW
-      await swReg.update();
-
-      // si hay uno esperando, lo activamos YA
-      if (swReg.waiting){
-        swReg.waiting.postMessage({ type: "SKIP_WAITING" });
-        return; // controllerchange hará reload
-      }
-    }
-    // si no hay waiting, recarga normal
-    window.location.reload();
-  } finally {
-    setTimeout(()=> setUpdateBtnState("ready"), 700);
+  // Si no hay waiting, forzamos check
+  try{ await swReg.update(); }catch{}
+  if (swReg.waiting){
+    swReg.waiting.postMessage({ type: "SKIP_WAITING" });
   }
-}
-
-function watchForUpdates(reg){
-  if (!reg) return;
-
-  // si ya hay update esperando al abrir
-  if (reg.waiting && navigator.serviceWorker.controller){
-    updateAvailable = true;
-    setUpdateBanner(true);
-    setUpdateGlow(true);
-  }
-
-  reg.addEventListener("updatefound", () => {
-    const nw = reg.installing;
-    if (!nw) return;
-
-    nw.addEventListener("statechange", () => {
-      // installed + ya existe controller => update disponible
-      if (nw.state === "installed" && navigator.serviceWorker.controller){
-        updateAvailable = true;
-        setUpdateBanner(true);
-        setUpdateGlow(true);
-      }
-    });
-  });
 }
 
 if ("serviceWorker" in navigator) {
@@ -467,25 +424,33 @@ if ("serviceWorker" in navigator) {
     try{
       swReg = await navigator.serviceWorker.register("./sw.js");
 
-      watchForUpdates(swReg);
+      // Si el SW nuevo ya está esperando (caso típico en móvil), mostramos UI
+      if (swReg.waiting) showUpdateUI();
 
+      // Cuando encuentre update
+      swReg.addEventListener("updatefound", () => {
+        const newWorker = swReg.installing;
+        if (!newWorker) return;
+        newWorker.addEventListener("statechange", () => {
+          // waiting = instalado pero no activo
+          if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+            showUpdateUI();
+          }
+        });
+      });
+
+      // Cuando cambie el controlador, recargamos para aplicar
       navigator.serviceWorker.addEventListener("controllerchange", () => {
-        // nuevo SW tomó control → recargar para ver cambios
         window.location.reload();
       });
 
-      const btn = document.getElementById("btnUpdateApp");
-      if (btn) btn.onclick = forceUpdateApp;
-
-      setUpdateBtnState("ready");
-    } catch {
-      // fallback: botón recarga
-      const btn = document.getElementById("btnUpdateApp");
-      if (btn) btn.onclick = () => window.location.reload();
-      setUpdateBtnState("ready");
-    }
+    }catch{}
   });
 }
+
+$("btnUpdateNow").onclick = triggerSWUpdate;
+$("btnUpdateApp").onclick = triggerSWUpdate;
+$("btnUpdateLater").onclick = () => hideUpdateUI;
 
 /* ===========================
    IndexedDB
@@ -608,6 +573,36 @@ function formatStampDateTime(it){
 }
 
 /* ===========================
+   Guardar copia en Descargas
+=========================== */
+function getSaveToDownloads(){
+  return localStorage.getItem("rf_save_downloads") !== "0"; // default ON
+}
+function setSaveToDownloads(v){
+  localStorage.setItem("rf_save_downloads", v ? "1" : "0");
+}
+function downloadBlobToDevice(blob, filename){
+  try{
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(()=> URL.revokeObjectURL(url), 1200);
+  }catch{}
+}
+function filenameForDownload(fecha, proyecto, createdAt){
+  const d = new Date(createdAt || Date.now());
+  const hh = pad2(d.getHours());
+  const mm = pad2(d.getMinutes());
+  const ss = pad2(d.getSeconds());
+  const safeProject = sanitizeName(proyecto || "Foto");
+  return `${fecha}_${safeProject}_${hh}${mm}${ss}.jpg`;
+}
+
+/* ===========================
    URLs temporales
 =========================== */
 let activeUrls = [];
@@ -629,10 +624,17 @@ function loadDocxFit(){
 $("docxFit").onchange = () => localStorage.setItem("rf_docx_fit", $("docxFit").value);
 
 /* ===========================
-   LOGO
+   LOGO (cargar / quitar) + preferencia WhatsApp
 =========================== */
 let logoDataUrl = null;
 let logoBitmap = null;
+
+function getShareLogo(){
+  return localStorage.getItem("rf_share_logo") !== "0"; // default ON
+}
+function setShareLogo(v){
+  localStorage.setItem("rf_share_logo", v ? "1" : "0");
+}
 
 async function dataUrlToBitmap(dataUrl){
   try{
@@ -650,28 +652,36 @@ async function dataUrlToBitmap(dataUrl){
 
 async function loadLogoFromStorage(){
   logoDataUrl = localStorage.getItem("rf_logo_dataurl");
-  const enabled = localStorage.getItem("rf_logo_enabled") === "1";
-  $("logoEnabled").checked = enabled;
+
+  // WhatsApp logo toggle
+  $("shareLogo").checked = getShareLogo();
+  $("shareLogo").onchange = () => setShareLogo($("shareLogo").checked);
 
   if (logoDataUrl){
     $("logoPreview").src = logoDataUrl;
     $("logoPreview").style.display = "inline-block";
+    $("btnBorrarLogo").style.display = "inline-flex";
     try { logoBitmap = await dataUrlToBitmap(logoDataUrl); } catch { logoBitmap = null; }
   } else {
     $("logoPreview").style.display = "none";
+    $("btnBorrarLogo").style.display = "none";
     logoBitmap = null;
   }
-  updateShareUI();
+}
+
+function clearLogo(){
+  localStorage.removeItem("rf_logo_dataurl");
+  logoDataUrl = null;
+  logoBitmap = null;
+  $("logoPreview").style.display = "none";
+  $("btnBorrarLogo").style.display = "none";
 }
 
 function loadLogoCorner(){
   const v = localStorage.getItem("rf_logo_corner") || "br";
   $("logoCorner").value = v;
 }
-$("logoCorner").onchange = () => {
-  localStorage.setItem("rf_logo_corner", $("logoCorner").value);
-  updateShareUI();
-};
+$("logoCorner").onchange = () => localStorage.setItem("rf_logo_corner", $("logoCorner").value);
 
 $("btnCargarLogo").onclick = () => $("logoInput").click();
 
@@ -691,79 +701,21 @@ $("logoInput").onchange = async () => {
 
   $("logoPreview").src = dataUrl;
   $("logoPreview").style.display = "inline-block";
+  $("btnBorrarLogo").style.display = "inline-flex";
 
   try {
     logoBitmap = await dataUrlToBitmap(dataUrl);
     alert("Logo cargado ✅");
   } catch {
-    logoBitmap = null;
-    alert("No pude cargar el logo. Prueba con un PNG/JPG.");
+    alert("No pude cargar el logo. Prueba con un PNG.");
   }
-  updateShareUI();
 };
 
-$("btnQuitarLogo").onclick = async () => {
-  if (!logoDataUrl && !logoBitmap){
-    alert("No hay logo cargado.");
-    return;
-  }
-  if (!confirm("¿Quitar/eliminar el logo cargado? (No borra tus fotos guardadas)")) return;
-
-  localStorage.removeItem("rf_logo_dataurl");
-  logoDataUrl = null;
-  logoBitmap = null;
-
-  $("logoPreview").src = "";
-  $("logoPreview").style.display = "none";
-
-  // Si estaba activo WhatsApp+logo, lo dejamos activo pero avisará al enviar.
-  // Si prefieres apagarlo automático, descomenta estas 2 líneas:
-  // $("waIncludeLogo").checked = false;
-  // localStorage.setItem("rf_wa_logo", "0");
-
-  updateShareUI();
-  alert("Logo eliminado ✅");
+$("btnBorrarLogo").onclick = () => {
+  if (!confirm("¿Quitar el logo cargado?")) return;
+  clearLogo();
+  alert("Logo quitado ✅");
 };
-
-$("logoEnabled").onchange = () => localStorage.setItem("rf_logo_enabled", $("logoEnabled").checked ? "1" : "0");
-
-/* ===========================
-   WhatsApp: preferencia + UI
-=========================== */
-function getWaIncludeLogo(){
-  return localStorage.getItem("rf_wa_logo") === "1";
-}
-function loadWhatsAppLogoPref(){
-  $("waIncludeLogo").checked = getWaIncludeLogo();
-}
-$("waIncludeLogo").onchange = () => {
-  localStorage.setItem("rf_wa_logo", $("waIncludeLogo").checked ? "1" : "0");
-  updateShareUI();
-};
-
-function updateShareUI(){
-  const want = getWaIncludeLogo();
-  const hasLogo = !!logoBitmap;
-
-  const hint = $("waHint");
-  if (hint){
-    if (!want) hint.textContent = "Envío WhatsApp: SIN logo";
-    else hint.textContent = hasLogo ? "Envío WhatsApp: CON logo ✅" : "Envío WhatsApp: CON logo ⚠️ (falta cargar logo)";
-  }
-
-  document.querySelectorAll("button.shareOne").forEach(btn => {
-    btn.textContent = want ? "📤 WhatsApp + logo" : "📤 WhatsApp";
-  });
-
-  const modalBtn = $("btnModalShare");
-  if (modalBtn){
-    modalBtn.textContent = want ? "📤 WhatsApp + logo" : "📤 WhatsApp";
-  }
-
-  document.querySelectorAll(".badgeShare").forEach(b => {
-    b.textContent = want ? "📤+L" : "📤";
-  });
-}
 
 /* ===========================
    Helpers de esquina (para evitar overlay)
@@ -777,7 +729,7 @@ function oppositeCorner(c){
 }
 
 /* ===========================
-   Overlays (logo + sello)
+   Overlays (logo + fecha/hora) evitando overlay
 =========================== */
 function drawLogoAtCorner(ctx, W, H, corner, alpha=0.85){
   if (!logoBitmap) return false;
@@ -849,54 +801,6 @@ function drawStampAtCorner(ctx, W, H, text, corner){
   ctx.restore();
 }
 
-/* ===========================
-   Compresión (captura)
-   - it.blob = base sin logo
-   - it.logoBlob = variante con logo (si captura ON)
-=========================== */
-async function compressImage(file, maxSide=1600, quality=0.82){
-  if (!file.type.startsWith("image/")) return { blob: file, logoBlob: null, hasLogo: false };
-
-  const img = new Image();
-  const url = URL.createObjectURL(file);
-
-  await new Promise((res, rej) => {
-    img.onload = () => res();
-    img.onerror = rej;
-    img.src = url;
-  });
-
-  const w = img.naturalWidth, h = img.naturalHeight;
-  const scale = Math.min(1, maxSide / Math.max(w,h));
-  const nw = Math.round(w * scale);
-  const nh = Math.round(h * scale);
-
-  const canvas = document.createElement("canvas");
-  canvas.width = nw; canvas.height = nh;
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(img, 0, 0, nw, nh);
-
-  URL.revokeObjectURL(url);
-
-  // Base sin logo
-  const baseBlob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
-
-  // Variante con logo (si captura ON)
-  const enabled = localStorage.getItem("rf_logo_enabled") === "1";
-  const corner = localStorage.getItem("rf_logo_corner") || "br";
-
-  let logoBlob = null;
-  if (enabled && logoBitmap){
-    drawLogoAtCorner(ctx, nw, nh, corner, 0.85);
-    logoBlob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
-  }
-
-  return { blob: baseBlob || file, logoBlob: logoBlob || null, hasLogo: false };
-}
-
-/* ===========================
-   Export overlays (logo + fecha/hora) evitando overlay
-=========================== */
 async function applyExportOverlaysToBlob(originalBlob, options){
   const { addLogo, addStamp, stampText, avoidDoubleLogo } = options;
 
@@ -924,6 +828,38 @@ async function applyExportOverlaysToBlob(originalBlob, options){
 
   const out = await new Promise(res => canvas.toBlob(res, "image/jpeg", 0.9));
   return out || originalBlob;
+}
+
+/* ===========================
+   Compresión (captura) — SIN logo (pro)
+   (El logo se aplica SOLO al compartir/exportar según casilla)
+=========================== */
+async function compressImage(file, maxSide=1600, quality=0.82){
+  if (!file.type.startsWith("image/")) return { blob: file, hasLogo: false };
+
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+
+  await new Promise((res, rej) => {
+    img.onload = () => res();
+    img.onerror = rej;
+    img.src = url;
+  });
+
+  const w = img.naturalWidth, h = img.naturalHeight;
+  const scale = Math.min(1, maxSide / Math.max(w,h));
+  const nw = Math.round(w * scale);
+  const nh = Math.round(h * scale);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = nw; canvas.height = nh;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0, nw, nh);
+
+  URL.revokeObjectURL(url);
+
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+  return { blob: blob || file, hasLogo: false };
 }
 
 /* ===========================
@@ -1024,7 +960,6 @@ function renderCaptura(){
   });
 
   wireEventsCaptura();
-  updateShareUI();
 }
 
 function wireEventsCaptura(){
@@ -1118,8 +1053,6 @@ function renderGaleria(){
   wrap.querySelectorAll("img.gThumb").forEach(img => {
     img.onclick = () => openModal(Number(img.dataset.open));
   });
-
-  updateShareUI();
 }
 
 /* ===========================
@@ -1146,8 +1079,6 @@ function openModal(id){
   $("btnModalDone").textContent = it.done ? "✏️ Editar" : "✅ Listo";
   $("btnModalShare").disabled = !it.done;
   $("btnModalShare").classList.toggle("btn-disabled", !it.done);
-
-  updateShareUI();
 }
 
 function closeModal(){
@@ -1197,28 +1128,22 @@ $("btnModalShare").onclick = async () => {
 
 /* ===========================
    Compartir a WhatsApp (solo imagen)
-   - Depende SOLO de waIncludeLogo
+   - Si "En WhatsApp: incluir logo" está activo, aplica logo al vuelo
 =========================== */
 async function shareOnlyImage(it){
   const safeProject = sanitizeName(it.proyecto || "Foto");
   const name = `${it.fecha}_${safeProject}.jpg`;
 
-  const wantLogo = getWaIncludeLogo();
   let outBlob = it.blob;
 
+  const wantLogo = $("shareLogo").checked && !!logoBitmap;
   if (wantLogo){
-    if (it.logoBlob){
-      outBlob = it.logoBlob;
-    } else if (logoBitmap){
-      outBlob = await applyExportOverlaysToBlob(it.blob, {
-        addLogo: true,
-        addStamp: false,
-        stampText: "",
-        avoidDoubleLogo: !!it.hasLogo
-      });
-    } else {
-      alert("Tienes activado 'WhatsApp + logo', pero no hay logo cargado. Se enviará SIN logo.");
-    }
+    outBlob = await applyExportOverlaysToBlob(it.blob, {
+      addLogo: true,
+      addStamp: false,
+      stampText: "",
+      avoidDoubleLogo: !!it.hasLogo
+    });
   }
 
   const file = new File([outBlob], name, { type: "image/jpeg" });
@@ -1254,23 +1179,29 @@ camInput.onchange = async () => {
 
   zipInfo.textContent = "Procesando fotos...";
   for (const file of files){
-    const { blob, logoBlob, hasLogo } = await compressImage(file);
+    const { blob, hasLogo } = await compressImage(file);
 
+    const createdAt = Date.now();
     const item = {
-      id: Date.now() + Math.floor(Math.random()*1000),
+      id: createdAt + Math.floor(Math.random()*1000),
       fecha,
       proyecto,
       descripcion: "",
       done: false,
       blob,
-      logoBlob: logoBlob||null,
       mime: "image/jpeg",
-      createdAt: Date.now(),
+      createdAt,
       hasLogo: !!hasLogo
     };
 
     await dbPut(item);
     cache.push(item);
+
+    // Guardar copia en Descargas (si está activado)
+    if (getSaveToDownloads()){
+      const fname = filenameForDownload(fecha, proyecto, createdAt);
+      downloadBlobToDevice(blob, fname);
+    }
   }
 
   camInput.value = "";
@@ -1357,7 +1288,7 @@ async function buildRegistroFotograficoDocxBuffer(
     styles: {
       default: {
         document: {
-          run: { font: "Calibri", size: 18 },
+          run: { font: "Calibri", size: 18 }, // Calibri 9
           paragraph: { spacing: { before: 0, after: 0 } }
         }
       }
@@ -1704,10 +1635,13 @@ function render(){
   $("desde").value = today;
   $("hasta").value = today;
 
+  // Pref: guardar Descargas (default ON)
+  $("saveToDownloads").checked = getSaveToDownloads();
+  $("saveToDownloads").onchange = () => setSaveToDownloads($("saveToDownloads").checked);
+
   loadDocxFit();
   await loadLogoFromStorage();
   loadLogoCorner();
-  loadWhatsAppLogoPref();
 
   try{
     cache = await dbGetAll();
@@ -1721,6 +1655,8 @@ function render(){
 </script>
 </body>
 </html>
+
+
 
 
 
