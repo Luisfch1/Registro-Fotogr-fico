@@ -1,7 +1,7 @@
 // sw.js
 // IMPORTANTE: cada vez que quieras forzar que el celular actualice SÍ o SÍ,
 // cambia esta versión (v3, v4, etc.)
-const CACHE_VERSION = "v3";
+const CACHE_VERSION = "v4";
 const CACHE = `rf-cache-${CACHE_VERSION}`;
 
 // Archivos propios que sí vale la pena cachear "app shell"
