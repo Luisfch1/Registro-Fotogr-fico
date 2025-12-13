@@ -215,11 +215,12 @@
           <span class="muted">Aplicar logo a nuevas fotos (captura)</span>
         </label>
 
-        <!-- NUEVO: WhatsApp controla si se incluye logo al enviar -->
         <label style="display:flex;align-items:center;gap:10px;margin:0">
           <input type="checkbox" id="waIncludeLogo" />
           <span class="muted">WhatsApp: incluir logo al enviar</span>
         </label>
+
+        <span id="waHint" class="muted"></span>
 
         <select id="logoCorner" style="width:auto">
           <option value="br">Logo: inferior derecha</option>
@@ -480,17 +481,6 @@ function formatStampDateTime(it){
 }
 
 /* ===========================
-   WhatsApp: preferencia
-=========================== */
-function loadWhatsAppLogoPref(){
-  const v = localStorage.getItem("rf_wa_logo") === "1";
-  $("waIncludeLogo").checked = v;
-}
-$("waIncludeLogo").onchange = () => {
-  localStorage.setItem("rf_wa_logo", $("waIncludeLogo").checked ? "1" : "0");
-};
-
-/* ===========================
    URLs temporales
 =========================== */
 let activeUrls = [];
@@ -550,7 +540,10 @@ function loadLogoCorner(){
   const v = localStorage.getItem("rf_logo_corner") || "br";
   $("logoCorner").value = v;
 }
-$("logoCorner").onchange = () => localStorage.setItem("rf_logo_corner", $("logoCorner").value);
+$("logoCorner").onchange = () => {
+  localStorage.setItem("rf_logo_corner", $("logoCorner").value);
+  updateShareUI();
+};
 
 $("btnCargarLogo").onclick = () => $("logoInput").click();
 
@@ -575,11 +568,53 @@ $("logoInput").onchange = async () => {
     logoBitmap = await dataUrlToBitmap(dataUrl);
     alert("Logo cargado ✅");
   } catch {
+    logoBitmap = null;
     alert("No pude cargar el logo. Prueba con un PNG.");
   }
+  updateShareUI();
 };
 
-$("logoEnabled").onchange = () => localStorage.setItem("rf_logo_enabled", $("logoEnabled").checked ? "1" : "0");
+$("logoEnabled").onchange = () => {
+  localStorage.setItem("rf_logo_enabled", $("logoEnabled").checked ? "1" : "0");
+};
+
+/* ===========================
+   WhatsApp: preferencia + UI (toque pro)
+=========================== */
+function getWaIncludeLogo(){
+  return localStorage.getItem("rf_wa_logo") === "1";
+}
+function loadWhatsAppLogoPref(){
+  $("waIncludeLogo").checked = getWaIncludeLogo();
+}
+$("waIncludeLogo").onchange = () => {
+  localStorage.setItem("rf_wa_logo", $("waIncludeLogo").checked ? "1" : "0");
+  updateShareUI();
+};
+
+function updateShareUI(){
+  const want = getWaIncludeLogo();
+  const hasLogo = !!logoBitmap;
+
+  const hint = $("waHint");
+  if (hint){
+    if (!want) hint.textContent = "Envío WhatsApp: SIN logo";
+    else hint.textContent = hasLogo ? "Envío WhatsApp: CON logo ✅" : "Envío WhatsApp: CON logo ⚠️ (falta cargar logo)";
+  }
+
+  document.querySelectorAll("button.shareOne").forEach(btn => {
+    btn.textContent = want ? "📤 WhatsApp + logo" : "📤 WhatsApp";
+  });
+
+  const modalBtn = $("btnModalShare");
+  if (modalBtn){
+    modalBtn.textContent = want ? "📤 WhatsApp + logo" : "📤 WhatsApp";
+  }
+
+  document.querySelectorAll(".badgeShare").forEach(b => {
+    b.textContent = want ? "📤+L" : "📤";
+  });
+}
 
 /* ===========================
    Helpers de esquina (para evitar overlay)
@@ -593,7 +628,7 @@ function oppositeCorner(c){
 }
 
 /* ===========================
-   Overlays: logo + sello
+   Overlays (logo + sello)
 =========================== */
 function drawLogoAtCorner(ctx, W, H, corner, alpha=0.85){
   if (!logoBitmap) return false;
@@ -667,8 +702,8 @@ function drawStampAtCorner(ctx, W, H, text, corner){
 
 /* ===========================
    Compresión (captura)
-   - SIEMPRE guarda base sin logo
-   - Si "captura logo" está activo, crea además una variante con logo (logoBlob)
+   - Guarda SIEMPRE base sin logo en it.blob
+   - Si logoEnabled está ON, guarda además it.logoBlob con logo (solo “variante”)
 =========================== */
 async function compressImage(file, maxSide=1600, quality=0.82){
   if (!file.type.startsWith("image/")) return { blob: file, logoBlob: null, hasLogo: false };
@@ -694,16 +729,15 @@ async function compressImage(file, maxSide=1600, quality=0.82){
 
   URL.revokeObjectURL(url);
 
-  // 1) Base sin logo
+  // Base sin logo
   const baseBlob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
 
-  // 2) Variante con logo (solo si captura está activa)
-  const enabledCapture = localStorage.getItem("rf_logo_enabled") === "1";
+  // Variante con logo (si captura ON)
+  const enabled = localStorage.getItem("rf_logo_enabled") === "1";
   const corner = localStorage.getItem("rf_logo_corner") || "br";
 
   let logoBlob = null;
-  if (enabledCapture && logoBitmap){
-    // dibujar logo encima y sacar segunda versión
+  if (enabled && logoBitmap){
     drawLogoAtCorner(ctx, nw, nh, corner, 0.85);
     logoBlob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
   }
@@ -960,6 +994,8 @@ function openModal(id){
   $("btnModalDone").textContent = it.done ? "✏️ Editar" : "✅ Listo";
   $("btnModalShare").disabled = !it.done;
   $("btnModalShare").classList.toggle("btn-disabled", !it.done);
+
+  updateShareUI();
 }
 
 function closeModal(){
@@ -1009,35 +1045,30 @@ $("btnModalShare").onclick = async () => {
 
 /* ===========================
    Compartir a WhatsApp (solo imagen)
-   - SIEMPRE depende de la casilla "waIncludeLogo"
-   - NO toca exportación
+   - Depende SOLO de waIncludeLogo
 =========================== */
 async function shareOnlyImage(it){
   const safeProject = sanitizeName(it.proyecto || "Foto");
   const name = `${it.fecha}_${safeProject}.jpg`;
 
-  const wantLogo = !!$("waIncludeLogo")?.checked;
+  const wantLogo = getWaIncludeLogo();
 
-  // base siempre es it.blob (nueva captura: sin logo; legacy: puede traerlo horneado)
   let outBlob = it.blob;
 
   if (wantLogo){
-    // 1) si existe variante con logo (creada al capturar), úsala
     if (it.logoBlob){
       outBlob = it.logoBlob;
-    }
-    // 2) si no hay variante, pero sí hay logo cargado, generar al vuelo
-    else if (logoBitmap){
+    } else if (logoBitmap){
       outBlob = await applyExportOverlaysToBlob(it.blob, {
         addLogo: true,
         addStamp: false,
         stampText: "",
-        // si la foto legacy ya venía con logo horneado, evita “doble logo”
         avoidDoubleLogo: !!it.hasLogo
       });
+    } else {
+      alert("Tienes activado 'WhatsApp + logo', pero no hay logo cargado. Se enviará SIN logo.");
     }
   }
-  // si wantLogo es false, se comparte base (si es legacy con logo horneado, no se puede quitar)
 
   const file = new File([outBlob], name, { type: "image/jpeg" });
 
@@ -1080,17 +1111,11 @@ camInput.onchange = async () => {
       proyecto,
       descripcion: "",
       done: false,
-
-      // base SIEMPRE
-      blob,
-      // variante con logo (si aplica en captura)
-      logoBlob: logoBlob || null,
-
+      blob,                 // base (normalmente sin logo)
+      logoBlob: logoBlob||null, // variante con logo si captura estaba ON
       mime: "image/jpeg",
       createdAt: Date.now(),
-
-      // legacy: indica si el blob YA incluye logo horneado
-      hasLogo: !!hasLogo
+      hasLogo: !!hasLogo    // legacy-friendly
     };
 
     await dbPut(item);
@@ -1519,6 +1544,7 @@ function render(){
   setStatus();
   if (viewMode === "captura") renderCaptura();
   else renderGaleria();
+  updateShareUI();
 }
 
 /* ===========================
@@ -1547,6 +1573,8 @@ function render(){
 </script>
 </body>
 </html>
+
+
 
 
 
