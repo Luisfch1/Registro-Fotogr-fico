@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#0b1220" />
 
-  <title>Registro Fotográfico v8</title>
+  <title>Registro Fotográfico v9</title>
 
   <!-- PWA -->
   <link rel="manifest" href="manifest.webmanifest">
@@ -34,6 +34,7 @@
       /* Acento */
       --accent:#3b82f6;
       --accent2:#60a5fa;
+      --accent-rgb:59,130,246;
 
       /* UI */
       --danger:#ef4444;
@@ -49,6 +50,7 @@
 
       --accent:#2563eb;
       --accent2:#3b82f6;
+      --accent-rgb:37,99,235;
 
       --danger:#ef4444;
       --shadow:0 10px 24px rgba(15,23,42,.10);
@@ -72,7 +74,7 @@
     .btn-danger{background:#ef4444;color:#fee2e2}
     .btn-disabled{opacity:.45;cursor:not-allowed}
     .muted{color:var(--muted);font-size:.8rem}
-    .pill{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;padding:4px 10px;border-radius:999px;background:rgba(59,130,246,.16);border:1px solid rgba(59,130,246,.25);color:var(--text);font-weight:900}
+    .pill{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;padding:4px 10px;border-radius:999px;background:rgba(var(--accent-rgb),.14);border:1px solid rgba(var(--accent-rgb),.22);color:var(--text);font-weight:900}
     .chip-done{
       font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;
       padding:4px 10px;border-radius:999px;background:#34d399;color:#052e1a;font-weight:900
@@ -92,7 +94,7 @@
 
     .tabs{display:flex;gap:8px;align-items:center}
     .tab{border:1px solid var(--border);background:var(--card);color:var(--text);border-radius:999px;padding:8px 12px;font-weight:800;cursor:pointer;font-size:.88rem}
-    .tab.active{background:rgba(59,130,246,.18);border-color:rgba(59,130,246,.35);color:var(--text)}
+    .tab.active{background:rgba(var(--accent-rgb),.16);border-color:rgba(var(--accent-rgb),.30);color:var(--text)}
 
     .galleryWrap{margin-top:10px;max-height:70vh;overflow:auto;border:1px solid var(--border);border-radius:14px;background:var(--card)}
     .dayHeader{
@@ -169,8 +171,8 @@
     .updateBar{
       display:none;
       margin-top:10px;
-      border:1px solid rgba(59,130,246,.35);
-      background:linear-gradient(90deg, rgba(34,197,94,.15), rgba(59,130,246,.08));
+      border:1px solid rgba(var(--accent-rgb),.30);
+      background:rgba(var(--accent-rgb),.10);
       padding:10px 12px;
       border-radius:14px;
       align-items:center;
@@ -179,41 +181,162 @@
     }
     .updateBar.show{display:flex}
     .glowBtn{
-      box-shadow: 0 0 0 rgba(59,130,246,0);
+      box-shadow: 0 0 0 rgba(var(--accent-rgb),0);
       animation: glow 1.2s ease-in-out infinite;
     }
     @keyframes glow{
-      0%{ box-shadow: 0 0 0 rgba(59,130,246,0); }
-      50%{ box-shadow: 0 0 22px rgba(59,130,246,.35); }
-      100%{ box-shadow: 0 0 0 rgba(59,130,246,0); }
+      0%{ box-shadow: 0 0 0 rgba(var(--accent-rgb),0); }
+      50%{ box-shadow: 0 0 22px rgba(var(--accent-rgb),.35); }
+      100%{ box-shadow: 0 0 0 rgba(var(--accent-rgb),0); }
     }
+
+    /* App bar */
+    .appbar{
+      display:flex;align-items:center;justify-content:space-between;gap:12px;
+      padding:12px 12px 6px;
+    }
+    .appbarLeft{display:grid;gap:2px;min-width:0}
+    .appTitle{
+      font-size:1.25rem;
+      font-weight:950;
+      letter-spacing:.2px;
+      line-height:1.1;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .appSubtitle{font-size:.82rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .iconBtn{
+      width:44px;height:44px;border-radius:14px;
+      background:var(--card2);border:1px solid var(--border);
+      display:grid;place-items:center;cursor:pointer;
+      box-shadow:var(--shadow);
+      user-select:none;-webkit-user-select:none;
+      position:relative;
+    }
+    .iconBtn.hasUpdate::after{
+      content:"";
+      position:absolute;
+      width:10px;height:10px;border-radius:50%;
+      right:8px;top:8px;
+      background:rgba(var(--accent-rgb),1);
+      box-shadow:0 0 0 4px rgba(var(--accent-rgb),.18);
+    }
+    .iconBtn .icon{font-size:1.15rem}
+
+    /* Tabs: ancho completo */
+    .tabs{
+      width:100%;
+      gap:0;
+      background:var(--card);
+      border:1px solid var(--border);
+      padding:4px;
+      border-radius:999px;
+      display:flex;
+      align-items:center;
+    }
+    .tab{
+      flex:1;
+      text-align:center;
+    }
+
+    /* Bottom sheet */
+    .sheetBackdrop{
+      position:fixed;inset:0;
+      background:rgba(2,6,23,.55);
+      display:none;
+      z-index:80;
+      padding:0;
+    }
+    .sheetBackdrop.open{display:block}
+    .sheet{
+      position:absolute;
+      left:0;right:0;bottom:0;
+      background:var(--card2);
+      border:1px solid var(--border);
+      border-bottom:none;
+      border-radius:18px 18px 0 0;
+      box-shadow:0 -18px 60px rgba(0,0,0,.55);
+      transform:translateY(110%);
+      transition:transform .22s ease;
+      touch-action:none;
+      max-height:85vh;
+      overflow:hidden;
+    }
+    .sheet.open{transform:translateY(0)}
+    .sheetHandle{
+      width:54px;height:6px;border-radius:999px;
+      background:rgba(148,163,184,.35);
+      margin:10px auto 6px;
+    }
+    .sheetHeader{
+      display:flex;align-items:center;justify-content:space-between;gap:10px;
+      padding:8px 12px 10px;
+      border-bottom:1px solid var(--border);
+    }
+    .sheetTitle{font-weight:950;font-size:1.02rem}
+    .sheetBody{
+      padding:12px;
+      display:grid;
+      gap:10px;
+      overflow:auto;
+      max-height:calc(85vh - 70px);
+    }
+    .sheetRow{
+      display:flex;align-items:center;justify-content:space-between;gap:10px;
+      padding:10px 10px;
+      border:1px solid var(--border);
+      border-radius:14px;
+      background:var(--card);
+    }
+    .sheetRowMain{min-width:0}
+    .sheetRowTitle{font-weight:900}
+    .accentPalette{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+    .accentDot{
+      width:22px;height:22px;border-radius:999px;
+      border:2px solid rgba(255,255,255,.22);
+      box-shadow:0 8px 18px rgba(0,0,0,.22);
+      cursor:pointer;
+      position:relative;
+    }
+    :root[data-theme="light"] .accentDot{border:2px solid rgba(15,23,42,.18)}
+    .accentDot.active::after{
+      content:"✓";
+      position:absolute;inset:0;
+      display:grid;place-items:center;
+      font-size:.85rem;font-weight:950;
+      color:white;
+      text-shadow:0 2px 10px rgba(0,0,0,.6);
+    }
+    :root[data-theme="light"] .accentDot.active::after{color:#0f172a;text-shadow:none}
+
   </style>
 </head>
 
 <body>
   <div class="wrap">
-    <h1>Registro Fotográfico</h1>
+    <div class="appbar">
+      <div class="appbarLeft">
+        <div class="appTitle">Registro Fotográfico</div>
+        <div class="appSubtitle">Registro diario de obra · Guardado local · ZIP (DOCX)</div>
+      </div>
+      <button class="iconBtn" id="btnSettings" aria-label="Configuración">
+        <span class="icon">⚙️</span>
+      </button>
+    </div>
 
     <div class="card">
-      <div class="row" style="justify-content:space-between;">
+      
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
         <div class="row">
-          <span class="pill">control</span>
+          <span class="pill">v9</span>
           <div class="muted">Guardado local (IndexedDB) + export ZIP (incluye DOCX).</div>
         </div>
-
-        <div class="row" style="gap:8px">
-          <div style="min-width:150px">
-            <label style="margin:0">Tema</label>
-            <select id="themeSelect">
-              <option value="dark">Oscuro</option>
-              <option value="light">Claro</option>
-            </select>
-          </div>
-          <button class="btn btn-secondary smallBtn" id="btnUpdateApp" style="display:none">🔄 Actualizar app</button>
-          <button class="btn btn-secondary smallBtn" id="btnRepairApp">🧰 Reparar</button>
+        <div class="right">
           <div id="status" class="status"></div>
         </div>
       </div>
+
 
       <!-- Barra de update -->
       <div class="updateBar" id="updateBar">
@@ -223,13 +346,12 @@
         <button class="btn btn-primary smallBtn glowBtn" id="btnUpdateNow">✅ Instalar actualización</button>
       </div>
 
-      <div class="row" style="margin-top:10px;justify-content:space-between;">
-        <div class="tabs">
-          <button class="tab active" id="tabCaptura">Captura</button>
-          <button class="tab" id="tabGaleria">Galería</button>
-        </div>
-        <div class="muted" id="rangeInfo"></div>
+      
+      <div class="tabs" style="margin-top:10px;">
+        <button class="tab active" id="tabCaptura">Captura</button>
+        <button class="tab" id="tabGaleria">Galería</button>
       </div>
+
 
       <div class="row" style="margin-top:10px;">
         <div style="flex:1;min-width:220px">
@@ -299,6 +421,7 @@
         <div class="muted" style="margin-top:8px">
           Miniaturas por día. El encabezado del día se queda pegado arriba al hacer scroll.
         </div>
+        <div class="muted" id="rangeInfo" style="margin-top:6px">Rango: —</div>
         <div id="galleryWrap" class="galleryWrap"></div>
       </div>
     </div>
@@ -372,6 +495,50 @@
     </div>
   </div>
 
+
+  <!-- Bottom sheet: Configuración -->
+  <div class="sheetBackdrop" id="sheetBackdrop" aria-hidden="true">
+    <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-label="Configuración">
+      <div class="sheetHandle" id="sheetHandle"></div>
+      <div class="sheetHeader">
+        <div>
+          <div class="sheetTitle">Configuración</div>
+          <div class="muted">Preferencias del dispositivo</div>
+        </div>
+        <button class="btn btn-secondary smallBtn" id="btnSheetClose">✖</button>
+      </div>
+
+      <div class="sheetBody">
+        <div class="sheetRow">
+          <div class="sheetRowMain">
+            <div class="sheetRowTitle">Tema</div>
+            <div class="muted" id="themeLabel">—</div>
+          </div>
+          <button class="btn btn-secondary smallBtn" id="btnThemeToggle" title="Cambiar tema">🌙</button>
+        </div>
+
+        <div class="sheetRow">
+          <div class="sheetRowMain">
+            <div class="sheetRowTitle">Acento</div>
+            <div class="muted">Color principal de la app</div>
+          </div>
+          <div class="accentPalette" id="accentPalette"></div>
+        </div>
+
+        <div class="sheetRow">
+          <div class="sheetRowMain">
+            <div class="sheetRowTitle">Actualizar app</div>
+            <div class="muted" id="updateLabel">Buscar / instalar actualización</div>
+          </div>
+          <button class="btn btn-primary smallBtn" id="btnUpdateFromSheet">🔄</button>
+        </div>
+
+        <button class="btn btn-secondary" id="btnResetCache" style="width:100%">🧰 Reiniciar caché (si se queda pegada)</button>
+      </div>
+    </div>
+  </div>
+
+
   <!-- Modal -->
   <div class="modal" id="modal">
     <div class="modalCard">
@@ -424,15 +591,24 @@ function applyTheme(theme){
   setMetaThemeColor(theme === "light" ? "#f5f7fb" : "#0b1220");
 }
 
+function syncThemeUI(){
+  const theme = document.documentElement.dataset.theme || "dark";
+  const label = $("themeLabel");
+  if (label) label.textContent = (theme === "light") ? "Claro" : "Oscuro";
+  const btn = $("btnThemeToggle");
+  if (btn) btn.textContent = (theme === "light") ? "☀️" : "🌙";
+}
+
+function toggleTheme(){
+  const cur = localStorage.getItem(THEME_KEY) || "dark";
+  applyTheme(cur === "dark" ? "light" : "dark");
+  syncThemeUI();
+}
+
 function initTheme(){
   const saved = localStorage.getItem(THEME_KEY) || "dark";
   applyTheme(saved);
-
-  const sel = $("themeSelect");
-  if (sel){
-    sel.value = saved;
-    sel.addEventListener("change", () => applyTheme(sel.value));
-  }
+  syncThemeUI();
 }
 
 
@@ -443,8 +619,10 @@ let waitingSW = null;
 
 function showUpdateUI(){
   $("updateBar").classList.add("show");
-  $("btnUpdateApp").style.display = "inline-flex";
-  $("btnUpdateApp").classList.add("glowBtn");
+  const sbtn = $("btnSettings");
+  if (sbtn) sbtn.classList.add("hasUpdate");
+  const ul = $("updateLabel");
+  if (ul) ul.textContent = "✅ Hay una actualización lista";
 }
 
 async function triggerSWUpdate(){
@@ -488,11 +666,147 @@ if ("serviceWorker" in navigator) {
   });
 }
 
-$("btnUpdateApp").onclick = triggerSWUpdate;
 $("btnUpdateNow").onclick = triggerSWUpdate;
 
 /* ===========================
-   🧰 Reparar app (NO borra fotos)
+   ⚙️ Bottom sheet (config)
+=========================== */
+function openSheet(){
+  $("sheetBackdrop").classList.add("open");
+  $("sheet").classList.add("open");
+  $("sheetBackdrop").setAttribute("aria-hidden","false");
+  // Si había puntico de update, lo dejamos (es info útil). No lo quitamos.
+  syncThemeUI();
+  syncAccentUI();
+  syncUpdateLabel();
+}
+function closeSheet(){
+  $("sheet").classList.remove("open");
+  // esperar transición
+  setTimeout(() => {
+    $("sheetBackdrop").classList.remove("open");
+    $("sheetBackdrop").setAttribute("aria-hidden","true");
+  }, 220);
+}
+
+$("btnSettings").onclick = openSheet;
+$("btnSheetClose").onclick = closeSheet;
+$("sheetBackdrop").addEventListener("click", (e)=>{ if (e.target.id === "sheetBackdrop") closeSheet(); });
+
+/* Gestos: arrastrar hacia abajo */
+(function sheetGestures(){
+  const sheet = $("sheet");
+  let startY = 0;
+  let curY = 0;
+  let dragging = false;
+
+  function onStart(e){
+    const t = e.touches ? e.touches[0] : e;
+    startY = t.clientY;
+    curY = 0;
+    dragging = true;
+    sheet.style.transition = "none";
+  }
+  function onMove(e){
+    if (!dragging) return;
+    const t = e.touches ? e.touches[0] : e;
+    const dy = t.clientY - startY;
+    curY = Math.max(0, dy);
+    sheet.style.transform = `translateY(${curY}px)`;
+  }
+  function onEnd(){
+    if (!dragging) return;
+    dragging = false;
+    sheet.style.transition = "transform .22s ease";
+    if (curY > 120){
+      sheet.style.transform = "translateY(110%)";
+      closeSheet();
+    } else {
+      sheet.style.transform = "translateY(0)";
+    }
+  }
+
+  $("sheetHandle").addEventListener("touchstart", onStart, { passive:true });
+  $("sheetHandle").addEventListener("touchmove", onMove, { passive:true });
+  $("sheetHandle").addEventListener("touchend", onEnd);
+
+  sheet.addEventListener("touchstart", (e)=>{
+    // Solo permitir gesto si el scroll está arriba (evita pelear con el scroll del contenido)
+    if (sheet.scrollTop && sheet.scrollTop > 0) return;
+    if (e.target.closest(".sheetBody")) return;
+    onStart(e);
+  }, { passive:true });
+  sheet.addEventListener("touchmove", onMove, { passive:true });
+  sheet.addEventListener("touchend", onEnd);
+})();
+
+/* ===========================
+   🎨 Acento (por dispositivo)
+=========================== */
+const ACCENT_KEY = "rf_accent";
+
+const ACCENTS = [
+  { key:"blue",   name:"Azul",   hex:"#3b82f6", hex2:"#60a5fa", rgb:"59,130,246" },
+  { key:"teal",   name:"Teal",   hex:"#14b8a6", hex2:"#2dd4bf", rgb:"20,184,166" },
+  { key:"green",  name:"Verde",  hex:"#22c55e", hex2:"#4ade80", rgb:"34,197,94" },
+  { key:"purple", name:"Morado", hex:"#8b5cf6", hex2:"#a78bfa", rgb:"139,92,246" },
+  { key:"orange", name:"Naranja",hex:"#f97316", hex2:"#fb923c", rgb:"249,115,22" },
+  { key:"rose",   name:"Rosa",   hex:"#f43f5e", hex2:"#fb7185", rgb:"244,63,94" }
+];
+
+function applyAccent(key){
+  const chosen = ACCENTS.find(a => a.key === key) || ACCENTS[0];
+  localStorage.setItem(ACCENT_KEY, chosen.key);
+  document.documentElement.style.setProperty("--accent", chosen.hex);
+  document.documentElement.style.setProperty("--accent2", chosen.hex2);
+  document.documentElement.style.setProperty("--accent-rgb", chosen.rgb);
+  syncAccentUI();
+}
+
+function syncAccentUI(){
+  const key = localStorage.getItem(ACCENT_KEY) || "blue";
+  const dots = document.querySelectorAll(".accentDot");
+  dots.forEach(d => d.classList.toggle("active", d.dataset.accent === key));
+}
+
+function initAccent(){
+  const key = localStorage.getItem(ACCENT_KEY) || "blue";
+  const pal = $("accentPalette");
+  if (pal){
+    pal.innerHTML = "";
+    for (const a of ACCENTS){
+      const dot = document.createElement("div");
+      dot.className = "accentDot";
+      dot.dataset.accent = a.key;
+      dot.title = a.name;
+      dot.style.background = a.hex;
+      dot.onclick = () => applyAccent(a.key);
+      pal.appendChild(dot);
+    }
+  }
+  applyAccent(key);
+}
+
+/* ===========================
+   Actualizar app (config)
+=========================== */
+function syncUpdateLabel(){
+  const ul = $("updateLabel");
+  if (!ul) return;
+  if (waitingSW) ul.textContent = "✅ Hay una actualización lista";
+  else ul.textContent = "Buscar / instalar actualización";
+}
+$("btnUpdateFromSheet").onclick = async () => {
+  await triggerSWUpdate();
+  // Feedback suave
+  if (!waitingSW) $("updateLabel").textContent = "🔎 Revisando…";
+  setTimeout(syncUpdateLabel, 1200);
+};
+
+$("btnThemeToggle").onclick = toggleTheme;
+
+/* ===========================
+   🧰 Reiniciar caché (NO borra fotos)
 =========================== */
 async function repairApp(){
   try{
@@ -508,7 +822,7 @@ async function repairApp(){
   const base = location.origin + location.pathname;
   location.replace(base + "?r=" + Date.now());
 }
-$("btnRepairApp").onclick = repairApp;
+$("btnResetCache").onclick = repairApp;
 
 /* ===========================
    IndexedDB
@@ -1636,6 +1950,8 @@ function setTab(mode){
   $("tabGaleria").classList.toggle("active", mode === "galeria");
   $("capturaView").style.display = mode === "captura" ? "block" : "none";
   $("galeriaView").style.display = mode === "galeria" ? "block" : "none";
+  const ri = $("rangeInfo");
+  if (ri) ri.style.display = (mode === "galeria") ? "block" : "none";
   render();
 }
 $("tabCaptura").onclick = () => setTab("captura");
@@ -1658,6 +1974,7 @@ function render(){
   $("hasta").value = today;
 
   initTheme();
+  initAccent();
 
   loadDocxFit();
   await loadLogoFromStorage();
@@ -1665,6 +1982,8 @@ function render(){
 
   try{
     cache = await dbGetAll();
+    const ri = $("rangeInfo");
+    if (ri) ri.style.display = "none";
     render();
   }catch{
     alert("No se pudo abrir la base local (IndexedDB). Prueba Chrome.");
@@ -1675,6 +1994,8 @@ function render(){
 </script>
 </body>
 </html>
+
+
 
 
 
