@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#0f172a" />
 
-  <title>Registro Fotográfico v5</title>
+  <title>Registro Fotográfico v6</title>
 
   <!-- PWA -->
   <link rel="manifest" href="manifest.webmanifest">
@@ -164,7 +164,7 @@
     .modalTitle{font-weight:900}
     .modalCloseRow{display:flex;justify-content:space-between;align-items:center;gap:10px}
 
-    /* ✅ FIX ANDROID/PWA: NO usar display:none en file inputs */
+    /* ✅ Android/PWA: NO usar display:none en file inputs */
     .hiddenFileInput{
       position: fixed;
       left: -9999px;
@@ -210,8 +210,10 @@
           <span class="pill">control</span>
           <div class="muted">Guardado local (IndexedDB) + export ZIP (incluye DOCX).</div>
         </div>
+
         <div class="row" style="gap:8px">
           <button class="btn btn-secondary smallBtn" id="btnUpdateApp" style="display:none">🔄 Actualizar app</button>
+          <button class="btn btn-secondary smallBtn" id="btnRepairApp">🧰 Reparar</button>
           <div id="status" class="status"></div>
         </div>
       </div>
@@ -276,6 +278,23 @@
         <div class="muted" style="margin-top:8px">
           Captura del día: escribe la descripción, marca ✅ Listo y si quieres 📤 WhatsApp (solo imagen).
         </div>
+
+        <!-- ✅ Opciones WhatsApp -->
+        <div class="row" style="margin-top:10px;">
+          <label style="display:flex;align-items:center;gap:10px;margin:0">
+            <input type="checkbox" id="waAddLogo" checked />
+            <span class="muted">WhatsApp: incluir logo (si hay logo cargado)</span>
+          </label>
+
+          <label style="display:flex;align-items:center;gap:10px;margin:0">
+            <input type="checkbox" id="waAddStamp" />
+            <span class="muted">WhatsApp: incluir fecha/hora</span>
+          </label>
+        </div>
+        <div class="muted" style="margin-top:6px">
+          Nota: si una foto ya quedó con logo en la captura, no se puede “quitar” al enviar.
+        </div>
+
         <div id="lista" class="list"></div>
       </div>
 
@@ -390,7 +409,6 @@
   </div>
 
 <script>
-/* ✅ FIX CRÍTICO: $ debe existir ANTES de usarse */
 function $(id){ return document.getElementById(id); }
 
 /* ===========================
@@ -445,9 +463,27 @@ if ("serviceWorker" in navigator) {
   });
 }
 
-/* ✅ Ahora sí, ya existe $ */
 $("btnUpdateApp").onclick = triggerSWUpdate;
 $("btnUpdateNow").onclick = triggerSWUpdate;
+
+/* ===========================
+   🧰 Reparar app (NO borra fotos)
+=========================== */
+async function repairApp(){
+  try{
+    if ("serviceWorker" in navigator){
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+    if (window.caches){
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+  }catch{}
+  const base = location.origin + location.pathname;
+  location.replace(base + "?r=" + Date.now());
+}
+$("btnRepairApp").onclick = repairApp;
 
 /* ===========================
    IndexedDB
@@ -468,6 +504,7 @@ function openDB(){
     req.onerror = () => reject(req.error);
   });
 }
+
 async function dbPut(item){
   const db = await openDB();
   return new Promise((resolve, reject) => {
@@ -524,7 +561,7 @@ function pad2(n){ return String(n).padStart(2,"0"); }
 function sanitizeName(s){
   return (s || "")
     .trim()
-    .replace(/[\\/:*?"<>|]/g,"")
+    .replace(/[\/:*?"<>|]/g,"")
     .replace(/\s+/g,"_")
     .slice(0,60) || "Proyecto";
 }
@@ -679,7 +716,7 @@ $("btnQuitarLogo").onclick = async () => {
 $("logoEnabled").onchange = () => localStorage.setItem("rf_logo_enabled", $("logoEnabled").checked ? "1" : "0");
 
 /* ===========================
-   Helpers de esquina (para evitar overlay)
+   Helpers esquina
 =========================== */
 function oppositeCorner(c){
   if (c === "br") return "tl";
@@ -690,7 +727,7 @@ function oppositeCorner(c){
 }
 
 /* ===========================
-   Compresión (captura) + pegar logo si toggle activo
+   Compresión (captura)
 =========================== */
 function drawLogoAtCorner(ctx, W, H, corner, alpha=0.85){
   if (!logoBitmap) return false;
@@ -795,7 +832,7 @@ async function compressImage(file, maxSide=1600, quality=0.82){
 }
 
 /* ===========================
-   Export overlays (logo + fecha/hora) evitando overlay
+   Overlays (logo + fecha/hora)
 =========================== */
 async function applyExportOverlaysToBlob(originalBlob, options){
   const { addLogo, addStamp, stampText, avoidDoubleLogo } = options;
@@ -1091,19 +1128,34 @@ $("btnModalShare").onclick = async () => {
 };
 
 /* ===========================
-   Compartir a WhatsApp (solo imagen)
+   WhatsApp (solo imagen)
 =========================== */
 async function shareOnlyImage(it){
   const safeProject = sanitizeName(it.proyecto || "Foto");
   const name = `${it.fecha}_${safeProject}.jpg`;
-  const file = new File([it.blob], name, { type: "image/jpeg" });
+
+  let blobToShare = it.blob;
+
+  const wantLogo = !!$("waAddLogo")?.checked;
+  const wantStamp = !!$("waAddStamp")?.checked;
+
+  if (wantLogo || wantStamp){
+    blobToShare = await applyExportOverlaysToBlob(it.blob, {
+      addLogo: wantLogo && !!logoBitmap,
+      addStamp: wantStamp,
+      stampText: wantStamp ? formatStampDateTime(it) : "",
+      avoidDoubleLogo: wantLogo && !!it.hasLogo
+    });
+  }
+
+  const file = new File([blobToShare], name, { type: "image/jpeg" });
 
   if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))){
     try { await navigator.share({ files: [file], title: "Foto" }); return; }
     catch { return; }
   }
 
-  const url = URL.createObjectURL(it.blob);
+  const url = URL.createObjectURL(blobToShare);
   const a = document.createElement("a");
   a.href = url;
   a.download = name;
@@ -1112,11 +1164,12 @@ async function shareOnlyImage(it){
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 
-  alert("Tu navegador no permite compartir archivos directo.\nSe descargó la foto para que la envíes por WhatsApp.");
+  alert("Tu navegador no permite compartir archivos directo.
+Se descargó la foto para que la envíes por WhatsApp.");
 }
 
 /* ===========================
-   Captura (✅ FIX: click confiable en PWA)
+   Captura
 =========================== */
 $("btnTomarFoto").onclick = () => {
   camInput.value = "";
@@ -1596,6 +1649,8 @@ function render(){
 </script>
 </body>
 </html>
+
+
 
 
 
