@@ -1,5 +1,5 @@
 // sw.js
-const CACHE_VERSION = "v8";
+const CACHE_VERSION = "v9";
 const CACHE = `rf-cache-${CACHE_VERSION}`;
 
 const ASSETS = [
