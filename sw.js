@@ -1,5 +1,5 @@
 // sw.js
-const CACHE_VERSION = "v9";
+const CACHE_VERSION = "v10";
 const CACHE = `rf-cache-${CACHE_VERSION}`;
 
 const ASSETS = [
@@ -78,6 +78,7 @@ self.addEventListener("fetch", (event) => {
     }
   })());
 });
+
 
 
 
