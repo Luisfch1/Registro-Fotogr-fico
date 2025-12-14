@@ -1,5 +1,5 @@
 // sw.js
-const CACHE_VERSION = "v6";
+const CACHE_VERSION = "v7";
 const CACHE = `rf-cache-${CACHE_VERSION}`;
 
 const ASSETS = [
@@ -22,7 +22,9 @@ self.addEventListener("message", (event) => {
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())
+    caches.open(CACHE).then(async (cache) => {
+      await Promise.allSettled(ASSETS.map((u) => cache.add(u)));
+    }).then(() => self.skipWaiting())
   );
 });
 
