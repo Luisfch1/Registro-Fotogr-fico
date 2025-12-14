@@ -1,10 +1,7 @@
 // sw.js
-// IMPORTANTE: cada vez que quieras forzar que el celular actualice SÍ o SÍ,
-// cambia esta versión (v3, v4, etc.)
-const CACHE_VERSION = "v5";
+const CACHE_VERSION = "v6";
 const CACHE = `rf-cache-${CACHE_VERSION}`;
 
-// Archivos propios que sí vale la pena cachear "app shell"
 const ASSETS = [
   "./",
   "./index.html",
@@ -19,11 +16,8 @@ const ASSETS = [
   "./icon-512-maskable.png"
 ];
 
-// Permite que el botón "Actualizar app" haga efecto
 self.addEventListener("message", (event) => {
-  if (event.data && event.data.type === "SKIP_WAITING") {
-    self.skipWaiting();
-  }
+  if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("install", (event) => {
@@ -34,64 +28,53 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
-    // Borra caches viejos
     const keys = await caches.keys();
-    await Promise.all(
-      keys
-        .filter((k) => k.startsWith("rf-cache-") && k !== CACHE)
-        .map((k) => caches.delete(k))
-    );
-
-    // Toma control del cliente
+    await Promise.all(keys.filter(k => k.startsWith("rf-cache-") && k !== CACHE).map(k => caches.delete(k)));
     await self.clients.claim();
   })());
 });
 
-// Estrategia:
-// - Para navegación (index): network-first (así siempre intenta traer lo nuevo)
-// - Para assets del mismo origen: cache-first con fallback a red
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   const url = new URL(req.url);
 
-  // Solo manejamos lo del mismo origen
   if (url.origin !== self.location.origin) return;
 
-  // Navegación (abrir la app / rutas)
   const isNav = req.mode === "navigate";
 
+  // NAV: network-first
   if (isNav) {
     event.respondWith((async () => {
+      const cache = await caches.open(CACHE);
       try {
-        // Intenta traer la versión nueva
-        const fresh = await fetch(req);
-        // Actualiza cache con lo que llegó
-        const cache = await caches.open(CACHE);
-        cache.put("./index.html", fresh.clone());
-        return fresh;
-      } catch (e) {
-        // Si no hay red, usa cache
-        const cached = await caches.match("./index.html");
-        return cached || caches.match("./") || Response.error();
+        const fresh = await fetch(req, { cache: "no-store" });
+        if (fresh && fresh.ok) {
+          await cache.put(req, fresh.clone());
+          return fresh;
+        }
+        throw new Error("bad response");
+      } catch {
+        const cached = await cache.match(req, { ignoreSearch: true });
+        return cached || cache.match("./index.html") || cache.match("./") || Response.error();
       }
     })());
     return;
   }
 
-  // Assets (css/js/icons/manifest, etc.)
+  // ASSETS: cache-first
   event.respondWith((async () => {
-    const cached = await caches.match(req);
+    const cache = await caches.open(CACHE);
+    const cached = await cache.match(req, { ignoreSearch: true });
     if (cached) return cached;
 
     try {
       const fresh = await fetch(req);
-      const cache = await caches.open(CACHE);
-      cache.put(req, fresh.clone());
+      if (fresh && fresh.ok) await cache.put(req, fresh.clone());
       return fresh;
-    } catch (e) {
-      // Sin red y sin cache
+    } catch {
       return Response.error();
     }
   })());
 });
+
 
