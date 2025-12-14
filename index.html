@@ -96,18 +96,24 @@
     .tab{border:1px solid var(--border);background:var(--card);color:var(--text);border-radius:999px;padding:8px 12px;font-weight:800;cursor:pointer;font-size:.88rem}
     .tab.active{background:rgba(var(--accent-rgb),.16);border-color:rgba(var(--accent-rgb),.30);color:var(--text)}
 
-    .galleryWrap{margin-top:10px;max-height:70vh;overflow:auto;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+    .galleryWrap{margin-top:10px;border:1px solid var(--border);border-radius:14px;background:var(--card);overflow:visible}
     .dayHeader{
-      position:sticky; top:0;
-      background:rgba(5,10,20,.92);
-      backdrop-filter: blur(6px);
-      border-bottom:1px solid #1f2937;
-      padding:10px 12px;
-      z-index:5;
-      display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-    }
-    .dayTitle{font-weight:900}
-    .dayMeta{color:#9ca3af;font-size:.8rem}
+  position:sticky; top:0;
+  background:var(--card);
+  border-bottom:1px solid var(--border);
+  padding:10px 12px;
+  z-index:5;
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+}
+.dayChip{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:6px 10px;border-radius:999px;
+  background:rgba(var(--accent-rgb),.14);
+  border:1px solid rgba(var(--accent-rgb),.26);
+  font-weight:900;
+}
+.dayTitle{font-weight:900}
+.dayMeta{color:var(--muted);font-size:.8rem}
     .gridThumbs{
       display:grid;
       grid-template-columns:repeat(3, minmax(0,1fr));
@@ -442,12 +448,12 @@
           </select>
         </div>
 
-        <div style="flex:1;min-width:180px">
-          <label for="desde">Desde</label>
+        <div id="desdeWrap" style="flex:1;min-width:180px">
+          <label id="desdeLabel" for="desde">Desde</label>
           <input type="date" id="desde" />
         </div>
 
-        <div style="flex:1;min-width:180px">
+        <div id="hastaWrap" style="flex:1;min-width:180px">
           <label for="hasta">Hasta</label>
           <input type="date" id="hasta" />
         </div>
@@ -1369,7 +1375,7 @@ function renderGaleria(){
 
     day.innerHTML = `
       <div class="dayHeader">
-        <div class="dayTitle">${date}</div>
+        <div class="dayTitle"><span class="dayChip">${formatDateLongES(date)}</span></div>
         <div class="dayMeta">· ${items.length} foto(s) · ${doneCount} listas · ${fmtBytes(bytes)}</div>
       </div>
       <div class="gridThumbs" data-day="${date}"></div>
@@ -1925,7 +1931,8 @@ async function exportZipByMode(modo, desde, hasta){
 $("btnZip").onclick = async () => {
   const modo = $("modoExport").value;
   const desde = $("desde").value || (fechaInput.value || hoyISO());
-  const hasta = $("hasta").value || (fechaInput.value || hoyISO());
+  let hasta = $("hasta").value || (fechaInput.value || hoyISO());
+  if (modo !== "rango") hasta = desde; // Día/Mes ignoran "hasta"
   await exportZipByMode(modo, desde, hasta);
 };
 
@@ -1933,6 +1940,32 @@ $("btnZipHoy").onclick = async () => {
   const hoy = hoyISO();
   await exportZipByMode("dia", hoy, hoy);
 };
+
+
+function updateExportUI(){
+  const modo = $("modoExport").value;
+  const hastaWrap = $("hastaWrap");
+  const desdeLabel = $("desdeLabel");
+
+  if (modo === "rango"){
+    hastaWrap.style.display = "block";
+    desdeLabel.textContent = "Desde";
+  } else if (modo === "dia"){
+    hastaWrap.style.display = "none";
+    desdeLabel.textContent = "Día";
+    $("hasta").value = $("desde").value; // día usa solo "desde"
+  } else { // mes
+    hastaWrap.style.display = "none";
+    desdeLabel.textContent = "Mes (elige un día)";
+    $("hasta").value = $("desde").value;
+  }
+}
+
+$("modoExport").addEventListener("change", updateExportUI);
+$("desde").addEventListener("change", () => {
+  if ($("modoExport").value !== "rango") $("hasta").value = $("desde").value;
+  updateExportUI();
+});
 
 $("btnBorrarTodo").onclick = async () => {
   if (!confirm("¿Borrar TODO (todas las fotos y descripciones del dispositivo)?")) return;
@@ -1973,6 +2006,8 @@ function render(){
   $("desde").value = today;
   $("hasta").value = today;
 
+  updateExportUI();
+
   initTheme();
   initAccent();
 
@@ -1994,6 +2029,8 @@ function render(){
 </script>
 </body>
 </html>
+
+
 
 
 
