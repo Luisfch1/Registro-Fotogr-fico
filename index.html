@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#0b1220" />
 
-  <title>Registro Fotográfico v9</title>
+  <title>Registro Fotográfico v11</title>
 
   <!-- PWA -->
   <link rel="manifest" href="manifest.webmanifest">
@@ -335,7 +335,7 @@
       
       <div class="row" style="justify-content:space-between;align-items:flex-start">
         <div class="row">
-          <span class="pill">v9</span>
+          <span class="pill">v11</span>
           <div class="muted">Guardado local (IndexedDB) + export ZIP (incluye DOCX).</div>
         </div>
         <div class="right">
@@ -411,6 +411,12 @@
             <span class="muted">WhatsApp: incluir logo (si hay logo cargado)</span>
           </label>
 
+
+          <label style="display:flex;align-items:center;gap:10px;margin:0">
+            <input type="checkbox" id="waAddTemplate" checked />
+            <span class="muted">WhatsApp: incluir texto (plantilla) sobre la foto</span>
+          </label>
+
           <label style="display:flex;align-items:center;gap:10px;margin:0">
             <input type="checkbox" id="waAddStamp" />
             <span class="muted">WhatsApp: incluir fecha/hora</span>
@@ -460,6 +466,20 @@
       </div>
 
       <div class="row" style="margin-top:10px;">
+        <div style="flex:1;min-width:220px">
+          <label for="templateSelect">Plantilla de salida</label>
+          <select id="templateSelect">
+            <option value="classic">Clásica (actual)</option>
+            <option value="minimal">Minimal (solo descripción)</option>
+            <option value="proyecto">Proyecto + descripción</option>
+            <option value="fecha">Solo fecha/hora</option>
+            <option value="clean">Sin texto</option>
+          </select>
+          <div class="muted" id="templateHelp" style="margin-top:6px">Define cómo se arma el texto (DOCX/TXT y opcionalmente sobre la foto).</div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:10px;">
         <label style="display:flex;align-items:center;gap:10px;margin:0">
           <input type="checkbox" id="useTimeNames" />
           <span class="muted">Nombrar fotos con hora (opcional)</span>
@@ -489,6 +509,12 @@
         <label style="display:flex;align-items:center;gap:10px;margin:0">
           <input type="checkbox" id="exportStampDT" />
           <span class="muted">En exportación: escribir fecha y hora sobre la foto</span>
+        </label>
+
+
+        <label style="display:flex;align-items:center;gap:10px;margin:0">
+          <input type="checkbox" id="exportTemplate" checked />
+          <span class="muted">En exportación: incluir texto (plantilla) sobre la foto</span>
         </label>
       </div>
 
@@ -751,6 +777,9 @@ $("sheetBackdrop").addEventListener("click", (e)=>{ if (e.target.id === "sheetBa
 =========================== */
 const ACCENT_KEY = "rf_accent";
 
+const PROJECT_KEY = "rf_project";
+const TEMPLATE_KEY = "rf_template";
+
 const ACCENTS = [
   { key:"blue",   name:"Azul",   hex:"#3b82f6", hex2:"#60a5fa", rgb:"59,130,246" },
   { key:"teal",   name:"Teal",   hex:"#14b8a6", hex2:"#2dd4bf", rgb:"20,184,166" },
@@ -892,6 +921,7 @@ async function dbClear(){
 =========================== */
 const fechaInput = $("fecha");
 const proyectoInput = $("proyecto");
+proyectoInput.addEventListener("input", () => setProjectDefault(proyectoInput.value));
 const camInput = $("camInput");
 
 const lista = $("lista");
@@ -950,6 +980,95 @@ function formatStampDateTime(it){
 }
 
 /* ===========================
+   🧾 Plantillas de salida (por dispositivo)
+=========================== */
+const TEMPLATES = {
+  classic:  { name: "Clásica (actual)", help: "Como siempre: DOCX usa 'FOTO N. descripción'. TXT solo descripción. (Sin texto sobre foto salvo que actives fecha/hora)." },
+  minimal:  { name: "Minimal", help: "Descripción + fecha/hora (en DOCX/TXT).", },
+  proyecto: { name: "Proyecto + descripción", help: "Incluye Proyecto (si existe) + descripción + fecha.", },
+  fecha:    { name: "Solo fecha/hora", help: "Para fotos sin descripción: solo fecha y hora.", },
+  clean:    { name: "Sin texto", help: "No agrega texto (DOCX deja 'FOTO N').", },
+};
+
+function getTemplateId(){
+  return localStorage.getItem(TEMPLATE_KEY) || "classic";
+}
+function setTemplateId(id){
+  localStorage.setItem(TEMPLATE_KEY, id);
+  syncTemplateUI();
+}
+
+function getProjectDefault(){
+  return (localStorage.getItem(PROJECT_KEY) || "").trim();
+}
+function setProjectDefault(v){
+  localStorage.setItem(PROJECT_KEY, (v || "").trim());
+}
+
+function getTemplateMeta(it){
+  const proj = (it.proyecto || "").trim() || (proyectoInput?.value || "").trim() || getProjectDefault();
+  const desc = (it.descripcion || "").trim();
+  const fecha = (it.fecha || "").trim();
+  const longDate = fecha ? formatDateLongES(fecha) : "";
+  const dt = new Date(it.createdAt || Date.now());
+  const hh = pad2(dt.getHours());
+  const mm = pad2(dt.getMinutes());
+  const time = `${hh}:${mm}`;
+  const stamp = fecha ? `${fecha} ${time}` : time;
+  return { proj, desc, fecha, longDate, time, stamp };
+}
+
+function buildTemplateLines(meta, templateId){
+  const id = templateId || "classic";
+  if (id === "clean") return [];
+  if (id === "fecha") return [meta.longDate || meta.fecha || "", meta.time].filter(Boolean);
+
+  if (id === "minimal"){
+    return [meta.desc || "—", meta.stamp].filter(Boolean);
+  }
+
+  if (id === "proyecto"){
+    const lines = [];
+    if (meta.proj) lines.push(meta.proj);
+    if (meta.desc) lines.push(meta.desc);
+    if (meta.longDate) lines.push(meta.longDate);
+    return lines.length ? lines : ["—"];
+  }
+
+  // classic
+  const lines = [];
+  if (meta.desc) lines.push(meta.desc);
+  else lines.push("—");
+  return lines;
+}
+
+function buildDocxCaption(n, meta, templateId){
+  const id = templateId || "classic";
+  if (id === "clean") return `FOTO ${n}.`;
+  if (id === "fecha") return `FOTO ${n}. ${meta.stamp}`;
+  if (id === "minimal") return `FOTO ${n}. ${(meta.desc || "—")} · ${meta.stamp}`;
+  if (id === "proyecto"){
+    const parts = [];
+    if (meta.proj) parts.push(meta.proj);
+    if (meta.desc) parts.push(meta.desc);
+    if (meta.stamp) parts.push(meta.stamp);
+    return `FOTO ${n}. ${parts.join(" · ") || "—"}`;
+  }
+  // classic
+  return `FOTO ${n}. ${(meta.desc || "—")}`;
+}
+
+function syncTemplateUI(){
+  const sel = $("templateSelect");
+  const help = $("templateHelp");
+  if (!sel || !help) return;
+  const id = getTemplateId();
+  sel.value = id;
+  help.textContent = (TEMPLATES[id]?.help || "");
+}
+
+
+/* ===========================
    URLs temporales
 =========================== */
 let activeUrls = [];
@@ -969,6 +1088,8 @@ function loadDocxFit(){
   $("docxFit").value = v;
 }
 $("docxFit").onchange = () => localStorage.setItem("rf_docx_fit", $("docxFit").value);
+
+$("templateSelect")?.addEventListener("change", () => setTemplateId($("templateSelect").value));
 
 /* ===========================
    LOGO
@@ -1179,8 +1300,100 @@ async function compressImage(file, maxSide=1600, quality=0.82){
 /* ===========================
    Overlays (logo + fecha/hora)
 =========================== */
+function roundRectPath(ctx, x, y, w, h, r){
+  const rr = Math.min(r, w/2, h/2);
+  ctx.beginPath();
+  ctx.moveTo(x+rr, y);
+  ctx.arcTo(x+w, y, x+w, y+h, rr);
+  ctx.arcTo(x+w, y+h, x, y+h, rr);
+  ctx.arcTo(x, y+h, x, y, rr);
+  ctx.arcTo(x, y, x+w, y, rr);
+  ctx.closePath();
+}
+
+function wrapLine(ctx, text, maxW){
+  const words = String(text || "").split(/\s+/).filter(Boolean);
+  if (!words.length) return [""];
+  const out = [];
+  let cur = words[0];
+  for (let i=1;i<words.length;i++){
+    const test = cur + " " + words[i];
+    if (ctx.measureText(test).width <= maxW) cur = test;
+    else { out.push(cur); cur = words[i]; }
+  }
+  out.push(cur);
+  return out;
+}
+
+function chooseTextCornerForLogo(logoCorner){
+  // Preferimos la esquina inferior opuesta horizontalmente al logo
+  if (logoCorner === "bl" || logoCorner === "tl") return "br";
+  return "bl";
+}
+
+function drawTemplateBlock(ctx, W, H, lines, logoCorner){
+  const clean = (lines || []).map(s => String(s || "").trim()).filter(Boolean);
+  if (!clean.length) return;
+
+  const corner = chooseTextCornerForLogo(logoCorner || "br");
+  const pad = Math.round(Math.min(W, H) * 0.02);
+  const maxW = Math.round(W * 0.86);
+
+  // Tipografía
+  const base = Math.max(18, Math.round(Math.min(W, H) * 0.035));
+  const titleSize = base + 2;
+  const bodySize = base;
+
+  // Pre-medición con wrapping
+  const temp = [];
+  ctx.save();
+  ctx.textBaseline = "top";
+
+  // línea 1 (más fuerte)
+  ctx.font = `900 ${titleSize}px Calibri, Arial, sans-serif`;
+  const first = wrapLine(ctx, clean[0], maxW);
+  temp.push(...first.map(t => ({ t, size: titleSize, weight: 900 })));
+
+  // resto
+  ctx.font = `700 ${bodySize}px Calibri, Arial, sans-serif`;
+  for (let i=1;i<clean.length;i++){
+    const wrapped = wrapLine(ctx, clean[i], maxW);
+    temp.push(...wrapped.map(t => ({ t, size: bodySize, weight: 700 })));
+  }
+
+  const lineGap = Math.round(bodySize * 0.35);
+  let textW = 0;
+  temp.forEach(L => {
+    ctx.font = `${L.weight} ${L.size}px Calibri, Arial, sans-serif`;
+    textW = Math.max(textW, ctx.measureText(L.t).width);
+  });
+
+  const textH = temp.reduce((sum, L) => sum + L.size + lineGap, 0) - lineGap;
+  const boxW = Math.round(textW + pad * 1.6);
+  const boxH = Math.round(textH + pad * 1.4);
+
+  let x = pad, y = H - pad - boxH;
+  if (corner === "br") x = W - pad - boxW;
+
+  // fondo
+  ctx.fillStyle = "rgba(2, 6, 23, 0.58)";
+  roundRectPath(ctx, x, y, boxW, boxH, Math.round(pad*0.8));
+  ctx.fill();
+
+  // texto
+  let cy = y + Math.round(pad*0.7);
+  for (const L of temp){
+    ctx.font = `${L.weight} ${L.size}px Calibri, Arial, sans-serif`;
+    ctx.fillStyle = "rgba(255,255,255,0.96)";
+    ctx.fillText(L.t, x + Math.round(pad*0.8), cy);
+    cy += L.size + lineGap;
+  }
+
+  ctx.restore();
+}
+
 async function applyExportOverlaysToBlob(originalBlob, options){
-  const { addLogo, addStamp, stampText, avoidDoubleLogo } = options;
+  const { addLogo, addStamp, stampText, avoidDoubleLogo, addTemplate, templateLines, logoCornerHint } = options;
 
   const bmp = await createImageBitmap(originalBlob);
   const canvas = document.createElement("canvas");
@@ -1200,8 +1413,18 @@ async function applyExportOverlaysToBlob(originalBlob, options){
   }
 
   if (addStamp && stampText){
-    const stampCorner = willHaveLogo ? oppositeCorner(logoCorner) : "bl";
+    let stampCorner = willHaveLogo ? oppositeCorner(logoCorner) : "tr";
+    // si hay plantilla, preferimos arriba para evitar choque con el bloque inferior
+    if (addTemplate) stampCorner = (logoCorner === "bl" || logoCorner === "tl") ? "tr" : "tl";
+    if (stampCorner === "bl" || stampCorner === "br") stampCorner = "tr";
     drawStampAtCorner(ctx, canvas.width, canvas.height, stampText, stampCorner);
+  }
+
+
+  // Plantilla (bloque de texto) — se dibuja al final para que quede legible
+  if (addTemplate && Array.isArray(templateLines) && templateLines.length){
+    const lc = logoCornerHint || logoCorner;
+    drawTemplateBlock(ctx, canvas.width, canvas.height, templateLines, lc);
   }
 
   const out = await new Promise(res => canvas.toBlob(res, "image/jpeg", 0.9));
@@ -1482,6 +1705,7 @@ async function shareOnlyImage(it){
   let blobToShare = it.blob;
 
   const wantLogo = !!$("waAddLogo")?.checked;
+  const wantTemplate = !!$("waAddTemplate")?.checked;
   const wantStamp = !!$("waAddStamp")?.checked;
 
   if (wantLogo || wantStamp){
@@ -1489,7 +1713,10 @@ async function shareOnlyImage(it){
       addLogo: wantLogo && !!logoBitmap,
       addStamp: wantStamp,
       stampText: wantStamp ? formatStampDateTime(it) : "",
-      avoidDoubleLogo: wantLogo && !!it.hasLogo
+      avoidDoubleLogo: wantLogo && !!it.hasLogo,
+      addTemplate: wantTemplate && (getTemplateId() !== "classic") && (getTemplateId() !== "clean"),
+      templateLines: (wantTemplate && (getTemplateId() !== "classic") && (getTemplateId() !== "clean")) ? buildTemplateLines(getTemplateMeta(it), getTemplateId()) : [],
+      logoCornerHint: localStorage.getItem("rf_logo_corner") || "br"
     });
   }
 
@@ -1696,15 +1923,18 @@ async function buildRegistroFotograficoDocxBuffer(
         addLogo: !!exportOpts.applyLogo,
         addStamp: !!exportOpts.applyStamp,
         stampText: exportOpts.applyStamp ? formatStampDateTime(it) : "",
-        avoidDoubleLogo: !!(it.hasLogo && exportOpts.applyLogo)
+        avoidDoubleLogo: !!(it.hasLogo && exportOpts.applyLogo),
+        addTemplate: !!exportOpts.applyTemplate && (exportOpts.templateId !== "classic") && (exportOpts.templateId !== "clean"),
+        templateLines: (!!exportOpts.applyTemplate && (exportOpts.templateId !== "classic") && (exportOpts.templateId !== "clean")) ? buildTemplateLines(getTemplateMeta(it), exportOpts.templateId) : [],
+        logoCornerHint: localStorage.getItem("rf_logo_corner") || "br"
       });
     }
 
     const ab = await finalBlob.arrayBuffer();
 
     const n = photoN++;
-    const desc = (it.descripcion || "").trim() || "—";
-    const caption = `FOTO ${n}. ${desc}`;
+    const meta = getTemplateMeta(it);
+    const caption = buildDocxCaption(n, meta, (exportOpts && exportOpts.templateId) ? exportOpts.templateId : "classic");
 
     const img = new ImageRun({
       data: ab,
@@ -1821,6 +2051,8 @@ async function exportZipByMode(modo, desde, hasta){
 
   const exportLogo = !!$("exportLogo")?.checked;
   const exportStampDT = !!$("exportStampDT")?.checked;
+  const exportTemplate = !!$("exportTemplate")?.checked;
+  const templateId = getTemplateId();
 
   let selected = [];
   if (modo === "dia"){
@@ -1875,7 +2107,10 @@ async function exportZipByMode(modo, desde, hasta){
         addLogo: exportLogo && !!logoBitmap,
         addStamp: exportStampDT,
         stampText: exportStampDT ? formatStampDateTime(it) : "",
-        avoidDoubleLogo: exportLogo && !!it.hasLogo
+        avoidDoubleLogo: exportLogo && !!it.hasLogo,
+        addTemplate: exportTemplate && (templateId !== "classic") && (templateId !== "clean"),
+        templateLines: (exportTemplate && (templateId !== "classic") && (templateId !== "clean")) ? buildTemplateLines(getTemplateMeta(it), templateId) : [],
+        logoCornerHint: localStorage.getItem("rf_logo_corner") || "br"
       });
     }
 
@@ -1906,7 +2141,7 @@ async function exportZipByMode(modo, desde, hasta){
   zipInfo.textContent = "Generando DOCX...";
   const docxBuffer = await buildRegistroFotograficoDocxBuffer(
     selected, tituloProyecto, start, end, IMG_W_CM, IMG_H_CM, MODULES_PER_PAGE,
-    { applyLogo: exportLogo && !!logoBitmap, applyStamp: exportStampDT }
+    { applyLogo: exportLogo && !!logoBitmap, applyStamp: exportStampDT, applyTemplate: exportTemplate, templateId }
   );
 
   root.file(`Registro_Fotografico_${start}_a_${end}.docx`, docxBuffer);
@@ -1965,6 +2200,10 @@ $("modoExport").addEventListener("change", updateExportUI);
 $("desde").addEventListener("change", () => {
   if ($("modoExport").value !== "rango") $("hasta").value = $("desde").value;
   updateExportUI();
+
+// Preferencias persistentes
+  if (proyectoInput) proyectoInput.value = getProjectDefault();
+  syncTemplateUI();
 });
 
 $("btnBorrarTodo").onclick = async () => {
@@ -2029,6 +2268,8 @@ function render(){
 </script>
 </body>
 </html>
+
+
 
 
 
