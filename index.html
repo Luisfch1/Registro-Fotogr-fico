@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#0b1220" />
 
-  <title>Registro Fotográfico v11.1</title>
+  <title>Registro Fotográfico v11</title>
 
   <!-- PWA -->
   <link rel="manifest" href="manifest.webmanifest">
@@ -335,7 +335,7 @@
       
       <div class="row" style="justify-content:space-between;align-items:flex-start">
         <div class="row">
-          <span class="pill">v11.1</span>
+          <span class="pill">v11</span>
           <div class="muted">Guardado local (IndexedDB) + export ZIP (incluye DOCX).</div>
         </div>
         <div class="right">
@@ -983,11 +983,11 @@ function formatStampDateTime(it){
    🧾 Plantillas de salida (por dispositivo)
 =========================== */
 const TEMPLATES = {
-  classic:  { name: "Clásica (actual)", help: "DOCX: 1 línea (FOTO N + descripción). TXT: descripción." },
-  minimal:  { name: "Minimal", help: "DOCX: 3 líneas (FOTO N / descripción / fecha-hora). TXT: descripción + fecha-hora." },
-  proyecto: { name: "Proyecto + descripción", help: "DOCX: FOTO N + Proyecto (negrita) / descripción / fecha-hora. TXT incluye Proyecto si existe." },
-  fecha:    { name: "Solo fecha/hora", help: "DOCX: FOTO N / fecha-hora (sin descripción). TXT: fecha-hora." },
-  clean:    { name: "Sin texto", help: "DOCX: solo FOTO N (sin descripción). TXT: vacío." },
+  classic:  { name: "Clásica (actual)", help: "Como siempre: DOCX usa 'FOTO N. descripción'. TXT solo descripción. (Sin texto sobre foto salvo que actives fecha/hora)." },
+  minimal:  { name: "Minimal", help: "Descripción + fecha/hora (en DOCX/TXT).", },
+  proyecto: { name: "Proyecto + descripción", help: "Incluye Proyecto (si existe) + descripción + fecha.", },
+  fecha:    { name: "Solo fecha/hora", help: "Para fotos sin descripción: solo fecha y hora.", },
+  clean:    { name: "Sin texto", help: "No agrega texto (DOCX deja 'FOTO N').", },
 };
 
 function getTemplateId(){
@@ -1042,80 +1042,21 @@ function buildTemplateLines(meta, templateId){
   return lines;
 }
 
-function buildDocxCaptionParagraphs(n, meta, templateId){
-  const { Paragraph, TextRun } = window.docx;
-  const id = templateId || "classic";
-
-  const p = (runs, after=120, before=0) => new Paragraph({
-    children: runs,
-    spacing: { before, after }
-  });
-
-  const r = (text, opts={}) => new TextRun({ text, ...opts });
-
-  const desc = (meta.desc || "—").trim() || "—";
-  const proj = (meta.proj || "").trim();
-  const stamp = (meta.stamp || "").trim();
-
-  // Muy visible: varias líneas y jerarquía
-  if (id === "clean"){
-    return [ p([ r(`FOTO ${n}.`, { bold:true }) ]) ];
-  }
-
-  if (id === "classic"){
-    return [ p([ r(`FOTO ${n}. `, { bold:true }), r(desc) ]) ];
-  }
-
-  if (id === "fecha"){
-    const line = stamp || meta.longDate || meta.fecha || "";
-    return [
-      p([ r(`FOTO ${n}.`, { bold:true }) ], 20),
-      p([ r(String(line), { italics:true, color:"64748B" }) ])
-    ];
-  }
-
-  if (id === "minimal"){
-    const out = [
-      p([ r(`FOTO ${n}.`, { bold:true }) ], 20),
-      p([ r(desc) ], stamp ? 10 : 120)
-    ];
-    if (stamp) out.push(p([ r(stamp, { italics:true, color:"64748B" }) ]));
-    return out;
-  }
-
-  if (id === "proyecto"){
-    const out = [
-      p([
-        r(`FOTO ${n}.`, { bold:true }),
-        ...(proj ? [ r("  "), r(proj, { bold:true }) ] : [])
-      ], 20),
-      p([ r(desc) ], stamp ? 10 : 120)
-    ];
-    if (stamp) out.push(p([ r(stamp, { italics:true, color:"64748B" }) ]));
-    return out;
-  }
-
-  // fallback
-  return [ p([ r(`FOTO ${n}. `, { bold:true }), r(desc) ]) ];
-}
-
-
 function buildDocxCaption(n, meta, templateId){
-  // Mantengo esta función por compatibilidad: devuelve la primera línea (string)
   const id = templateId || "classic";
   if (id === "clean") return `FOTO ${n}.`;
-  if (id === "fecha") return `FOTO ${n}. ${(meta.stamp || meta.longDate || meta.fecha || "").trim()}`;
-  if (id === "minimal") return `FOTO ${n}. ${(meta.desc || "—")} · ${(meta.stamp || "").trim()}`;
+  if (id === "fecha") return `FOTO ${n}. ${meta.stamp}`;
+  if (id === "minimal") return `FOTO ${n}. ${(meta.desc || "—")} · ${meta.stamp}`;
   if (id === "proyecto"){
     const parts = [];
-    if ((meta.proj||"").trim()) parts.push(meta.proj.trim());
-    if ((meta.desc||"").trim()) parts.push(meta.desc.trim());
-    if ((meta.stamp||"").trim()) parts.push(meta.stamp.trim());
+    if (meta.proj) parts.push(meta.proj);
+    if (meta.desc) parts.push(meta.desc);
+    if (meta.stamp) parts.push(meta.stamp);
     return `FOTO ${n}. ${parts.join(" · ") || "—"}`;
   }
+  // classic
   return `FOTO ${n}. ${(meta.desc || "—")}`;
 }
-
 
 function syncTemplateUI(){
   const sel = $("templateSelect");
@@ -1767,7 +1708,7 @@ async function shareOnlyImage(it){
   const wantTemplate = !!$("waAddTemplate")?.checked;
   const wantStamp = !!$("waAddStamp")?.checked;
 
-  if (wantLogo || wantStamp || wantTemplate){
+  if (wantLogo || wantStamp){
     blobToShare = await applyExportOverlaysToBlob(it.blob, {
       addLogo: wantLogo && !!logoBitmap,
       addStamp: wantStamp,
@@ -1977,7 +1918,7 @@ async function buildRegistroFotograficoDocxBuffer(
     const fixedBlob = await normalizeToFixedFrameJpg(it.blob, frameW, frameH, 0.9, fitMode);
 
     let finalBlob = fixedBlob;
-    if (exportOpts?.applyLogo || exportOpts?.applyStamp || exportOpts?.applyTemplate){
+    if (exportOpts?.applyLogo || exportOpts?.applyStamp){
       finalBlob = await applyExportOverlaysToBlob(fixedBlob, {
         addLogo: !!exportOpts.applyLogo,
         addStamp: !!exportOpts.applyStamp,
@@ -1993,7 +1934,7 @@ async function buildRegistroFotograficoDocxBuffer(
 
     const n = photoN++;
     const meta = getTemplateMeta(it);
-    const captionParas = buildDocxCaptionParagraphs(n, meta, (exportOpts && exportOpts.templateId) ? exportOpts.templateId : "classic");
+    const caption = buildDocxCaption(n, meta, (exportOpts && exportOpts.templateId) ? exportOpts.templateId : "classic");
 
     const img = new ImageRun({
       data: ab,
@@ -2009,7 +1950,10 @@ async function buildRegistroFotograficoDocxBuffer(
           alignment: AlignmentType.CENTER,
           spacing: { before: 0, after: 60 }
         }),
-        ...captionParas
+        new Paragraph({
+          children: [new TextRun({ text: caption })],
+          spacing: { before: 0, after: 120 }
+        })
       ]
     });
   }
@@ -2158,7 +2102,7 @@ async function exportZipByMode(modo, desde, hasta){
     const filename = filenameForItem(it, n, useTime);
 
     let outBlob = it.blob;
-    if (exportLogo || exportStampDT || exportTemplate){
+    if (exportLogo || exportStampDT){
       outBlob = await applyExportOverlaysToBlob(it.blob, {
         addLogo: exportLogo && !!logoBitmap,
         addStamp: exportStampDT,
@@ -2178,7 +2122,7 @@ async function exportZipByMode(modo, desde, hasta){
     manifestRows.push({
       fecha: it.fecha,
       archivo: `${it.fecha}/${filename}`,
-      descripcion: (it.descripcion || "").trim(),
+      descripcion: descText,
       proyecto: it.proyecto || "",
       done: !!it.done
     });
@@ -2324,6 +2268,8 @@ function render(){
 </script>
 </body>
 </html>
+
+
 
 
 
